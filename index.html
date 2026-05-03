@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0f14" />
+<title>IV Dosing Calculator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2314b8a6'/%3E%3Cpath d='M10 8h12M16 8v16M11 24h10' stroke='%230b0f14' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="logo" width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="var(--accent)"/>
+      <path d="M10 8h12M16 8v16M11 24h10" stroke="var(--bg)" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>IV Dosing</h1>
+      <p class="subtitle">Emergency &amp; critical care</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button id="btn-settings" class="btn-ghost" title="Library settings" aria-label="Library settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- Patient strip -->
+<section class="patient-strip">
+  <label class="weight-field">
+    <span>Weight</span>
+    <div class="weight-input">
+      <input id="weight" type="number" inputmode="decimal" step="0.1" min="0" placeholder="—" />
+      <div class="unit-toggle" role="tablist" aria-label="Weight unit">
+        <button data-unit="kg" class="active" role="tab" aria-selected="true">kg</button>
+        <button data-unit="lb" role="tab" aria-selected="false">lb</button>
+      </div>
+    </div>
+  </label>
+  <div class="weight-derived" id="weight-derived" aria-live="polite"></div>
+</section>
+
+<!-- Category tabs -->
+<nav class="cats" id="cats" aria-label="Medication categories"></nav>
+
+<!-- Search -->
+<div class="search-row">
+  <input id="search" type="search" placeholder="Search medication…" autocomplete="off" />
+  <button id="btn-add" class="btn-primary" title="Add medication">+ Add</button>
+</div>
+
+<!-- Med grid -->
+<main id="grid" class="grid" aria-live="polite"></main>
+
+<!-- ============== CALCULATOR MODAL ============== -->
+<dialog id="calc-modal" class="modal">
+  <form method="dialog" class="modal-card calc-card" id="calc-form" onsubmit="event.preventDefault()">
+    <header class="modal-head">
+      <div>
+        <h2 id="calc-name">—</h2>
+        <p id="calc-cat" class="subtitle"></p>
+      </div>
+      <button type="button" class="btn-ghost" id="calc-close" aria-label="Close">✕</button>
+    </header>
+
+    <!-- Mode toggle (bolus/infusion) -->
+    <div class="seg" id="calc-mode-seg" role="tablist" aria-label="Dose mode">
+      <button type="button" data-mode="bolus" role="tab">Bolus</button>
+      <button type="button" data-mode="infusion" role="tab">Infusion</button>
+    </div>
+
+    <!-- Concentration -->
+    <div class="field">
+      <label for="calc-conc">Concentration</label>
+      <select id="calc-conc"></select>
+    </div>
+
+    <!-- Dose -->
+    <div class="field dose-field">
+      <label for="calc-dose">Dose</label>
+      <div class="dose-row">
+        <input id="calc-dose" type="number" inputmode="decimal" step="any" />
+        <span id="calc-dose-units" class="dose-units"></span>
+      </div>
+      <div class="range-row">
+        <input id="calc-range" type="range" step="any" />
+        <div class="range-labels"><span id="calc-range-min"></span><span id="calc-range-max"></span></div>
+      </div>
+    </div>
+
+    <!-- Result -->
+    <section class="result" id="calc-result" aria-live="polite"></section>
+
+    <!-- Notes -->
+    <p class="notes" id="calc-notes"></p>
+
+    <footer class="modal-foot">
+      <button type="button" class="btn-ghost" id="calc-edit">Edit medication</button>
+      <button type="button" class="btn-primary" id="calc-done">Done</button>
+    </footer>
+  </form>
+</dialog>
+
+<!-- ============== EDIT MODAL ============== -->
+<dialog id="edit-modal" class="modal">
+  <form class="modal-card edit-card" id="edit-form" onsubmit="event.preventDefault()">
+    <header class="modal-head">
+      <h2 id="edit-title">Edit medication</h2>
+      <button type="button" class="btn-ghost" id="edit-close" aria-label="Close">✕</button>
+    </header>
+
+    <div class="grid-2">
+      <div class="field">
+        <label>Name</label>
+        <input name="name" required />
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <input name="category" list="cat-list" required />
+        <datalist id="cat-list"></datalist>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Type</label>
+      <div class="seg" data-name="type">
+        <button type="button" data-val="bolus">Bolus</button>
+        <button type="button" data-val="infusion">Infusion</button>
+        <button type="button" data-val="both">Both</button>
+      </div>
+    </div>
+
+    <fieldset class="block">
+      <legend>Concentrations</legend>
+      <div id="conc-list" class="conc-list"></div>
+      <button type="button" class="btn-ghost small" id="add-conc">+ Concentration</button>
+    </fieldset>
+
+    <fieldset class="block" id="bolus-block">
+      <legend>Bolus</legend>
+      <div class="grid-3">
+        <div class="field"><label>Default dose</label><input name="bolus-dose" type="number" step="any" /></div>
+        <div class="field">
+          <label>Unit</label>
+          <select name="bolus-unit">
+            <option>mcg</option><option>mg</option><option>units</option><option>mEq</option><option>g</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Per kg?</label>
+          <div class="seg" data-name="bolus-perkg"><button type="button" data-val="true">Yes</button><button type="button" data-val="false">No</button></div>
+        </div>
+        <div class="field"><label>Min</label><input name="bolus-min" type="number" step="any" /></div>
+        <div class="field"><label>Max</label><input name="bolus-max" type="number" step="any" /></div>
+        <div class="field"><label>Hard cap</label><input name="bolus-cap" type="number" step="any" /></div>
+      </div>
+      <div class="field"><label>Notes</label><textarea name="bolus-notes" rows="2"></textarea></div>
+    </fieldset>
+
+    <fieldset class="block" id="infusion-block">
+      <legend>Infusion</legend>
+      <div class="grid-3">
+        <div class="field"><label>Default rate</label><input name="inf-dose" type="number" step="any" /></div>
+        <div class="field">
+          <label>Unit</label>
+          <select name="inf-unit">
+            <option>mcg</option><option>mg</option><option>units</option><option>mEq</option><option>g</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Per kg?</label>
+          <div class="seg" data-name="inf-perkg"><button type="button" data-val="true">Yes</button><button type="button" data-val="false">No</button></div>
+        </div>
+        <div class="field">
+          <label>Per</label>
+          <div class="seg" data-name="inf-pertime"><button type="button" data-val="min">min</button><button type="button" data-val="hr">hr</button></div>
+        </div>
+        <div class="field"><label>Min</label><input name="inf-min" type="number" step="any" /></div>
+        <div class="field"><label>Max</label><input name="inf-max" type="number" step="any" /></div>
+      </div>
+      <div class="field"><label>Notes</label><textarea name="inf-notes" rows="2"></textarea></div>
+    </fieldset>
+
+    <div class="field">
+      <label>General notes</label>
+      <textarea name="notes" rows="2"></textarea>
+    </div>
+
+    <footer class="modal-foot space-between">
+      <button type="button" class="btn-danger" id="edit-delete">Delete</button>
+      <div class="row-gap">
+        <button type="button" class="btn-ghost" id="edit-cancel">Cancel</button>
+        <button type="button" class="btn-primary" id="edit-save">Save</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+
+<!-- ============== SETTINGS MODAL ============== -->
+<dialog id="settings-modal" class="modal">
+  <div class="modal-card">
+    <header class="modal-head">
+      <h2>Library settings</h2>
+      <button type="button" class="btn-ghost" id="settings-close" aria-label="Close">✕</button>
+    </header>
+    <p class="subtitle">Customize, back up, or restore your medication library. Everything is stored locally on this device.</p>
+    <div class="settings-grid">
+      <button class="btn-ghost" id="export-btn">Export library (JSON)</button>
+      <button class="btn-ghost" id="import-btn">Import library (JSON)</button>
+      <input type="file" id="import-file" accept="application/json" hidden />
+      <button class="btn-ghost" id="reset-btn">Reset to defaults</button>
+    </div>
+    <hr />
+    <p class="disclaimer">
+      <strong>Clinical disclaimer.</strong> This calculator is a decision-support aid for trained clinicians.
+      All defaults must be verified against your local protocols and pharmacy formulary before use.
+      Always double-check doses, concentrations, and units. The author assumes no liability for clinical decisions made using this tool.
+    </p>
+  </div>
+</dialog>
+
+<script src="meds.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
