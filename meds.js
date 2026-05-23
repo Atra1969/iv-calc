@@ -1727,6 +1727,61 @@ const DEFAULT_MEDS = [
       { label: "ATLS 10th Edition — Shock", url: "https://www.facs.org/quality-programs/trauma/education/advanced-trauma-life-support/" }
     ]
   },
+
+  // ---------------- ELECTRICAL THERAPY (Code tab only) ----------------
+  // These entries are surfaced ONLY in the Code tab. They have:
+  //   - codeOnly: true       → hidden from "All", search, and category lists
+  //   - code: {...}          → makes them appear in codeMeds()
+  //   - customCalc: "..."    → opens a bespoke joules panel instead of mg dosing
+  {
+    id: "defibrillation",
+    name: "Defibrillation",
+    category: "_codeOnly",
+    codeOnly: true,
+    type: "bolus",
+    customCalc: "defibrillation",
+    populations: {
+      adult:     { _showInPopulation: true },
+      pediatric: { _showInPopulation: true },
+      neonatal:  { _showInPopulation: true }
+    },
+    code: {
+      role: "Defibrillation",
+      adult:     { dose: 200, unit: "J", perKg: false, repeat: "Subsequent shocks 200–360 J biphasic" },
+      pediatric: { dose: 2,   unit: "J", perKg: true, max: 200, repeat: "2 J/kg → 4 J/kg → ≥4 J/kg (max 10 J/kg or adult dose)" }
+    },
+    notes: "VF / pulseless VT — UNSYNCHRONIZED shock. Adult: 200 J biphasic (escalate up to 360 J). Pediatric: 2 J/kg first shock, 4 J/kg second, then ≥4 J/kg up to 10 J/kg or adult dose. Resume CPR immediately for 2 min after each shock; do not pulse-check between shocks.",
+    sources: [
+      { label: "AHA ACLS Adult Cardiac Arrest Algorithm (2020)", url: "https://cpr.heart.org/en/resuscitation-science/cpr-and-ecc-guidelines" },
+      { label: "AHA PALS Pediatric Cardiac Arrest Algorithm (2020)", url: "https://cpr.heart.org/en/cpr-courses-and-kits/healthcare-professional/pals" },
+      { label: "ERC Guidelines 2021 — Adult Advanced Life Support", url: "https://cprguidelines.eu/" }
+    ]
+  },
+  {
+    id: "cardioversion",
+    name: "Synchronized Cardioversion",
+    category: "_codeOnly",
+    codeOnly: true,
+    type: "bolus",
+    customCalc: "cardioversion",
+    populations: {
+      adult:     { _showInPopulation: true },
+      pediatric: { _showInPopulation: true },
+      neonatal:  { _showInPopulation: true }
+    },
+    code: {
+      role: "Synch cardioversion",
+      adult:     { dose: 100, unit: "J", perKg: false, repeat: "SVT/AFlutter 50–100 J; AFib 120–200 J; monomorphic VT 100 J (escalate if needed)" },
+      pediatric: { dose: 0.5, unit: "J", perKg: true, max: 200, repeat: "0.5–1 J/kg → 2 J/kg if ineffective" }
+    },
+    notes: "Unstable tachyarrhythmia WITH a pulse — SYNCHRONIZED shock. Adult initial energies: narrow regular (SVT/AFlutter) 50–100 J, narrow irregular (AFib) 120–200 J, wide regular (monomorphic VT) 100 J, wide irregular treat as VF (unsynchronized). Pediatric: start 0.5–1 J/kg, escalate to 2 J/kg. Sedate if conscious. Confirm sync mode is engaged before every shock — it re-arms between shocks on most devices.",
+    sources: [
+      { label: "AHA ACLS Adult Tachycardia With a Pulse Algorithm (2020)", url: "https://cpr.heart.org/en/resuscitation-science/cpr-and-ecc-guidelines" },
+      { label: "AHA PALS Pediatric Tachycardia With a Pulse Algorithm (2020)", url: "https://cpr.heart.org/en/cpr-courses-and-kits/healthcare-professional/pals" },
+      { label: "ERC Guidelines 2021 — Adult Advanced Life Support", url: "https://cprguidelines.eu/" }
+    ]
+  },
+
   {
     id: "hypertonic_saline_3",
     name: "3% Saline (Hypertonic)",

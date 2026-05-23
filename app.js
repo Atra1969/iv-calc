@@ -41,7 +41,7 @@
   // ----------- STATE -----------
   let library = loadLibrary();
   let state = Object.assign(
-    { weightKg: null, unit: "kg", category: "All", search: "", filter: "all", currentMedId: null, mode: "bolus", concIdx: 0, dose: null, population: "adult", populationManual: false },
+    { weightKg: null, unit: "kg", category: "All", search: "", filter: "all", sort: "natural", currentMedId: null, mode: "bolus", concIdx: 0, dose: null, population: "adult", populationManual: false },
     loadState()
   );
   if (!["adult", "pediatric", "neonatal"].includes(state.population)) state.population = "adult";
@@ -67,21 +67,27 @@
   // Each migration is idempotent and safe to run repeatedly.
   function migrateLibrary(lib) {
     let changed = false;
-    // 2026-05-23: Replace the old Holliday-Segar 4-2-1 "Maintenance Fluid (4-2-1)"
-    // entry under "Fluids" with the new simple 5/10/20 mL/kg calculator under a
-    // dedicated "Maintenance" category. (4-2-1 is for burns, not maintenance.)
+    const hasDefault = typeof DEFAULT_MEDS !== "undefined";
+    // 2026-05-23a: Replace old Holliday-Segar 4-2-1 entry with simple 5/10/20 mL/kg.
     const oldIdx = lib.findIndex(m => m && m.id === "maintenance_421");
-    const newDefault = (typeof DEFAULT_MEDS !== "undefined")
-      ? DEFAULT_MEDS.find(m => m && m.id === "maintenance_mlkg")
-      : null;
-    if (oldIdx >= 0 && newDefault) {
-      lib.splice(oldIdx, 1, JSON.parse(JSON.stringify(newDefault)));
+    const maintNew = hasDefault ? DEFAULT_MEDS.find(m => m && m.id === "maintenance_mlkg") : null;
+    if (oldIdx >= 0 && maintNew) {
+      lib.splice(oldIdx, 1, JSON.parse(JSON.stringify(maintNew)));
       changed = true;
-    } else if (oldIdx < 0 && newDefault && !lib.some(m => m && m.id === "maintenance_mlkg")) {
-      // Old entry already gone but the new one wasn't seeded — add it.
-      lib.push(JSON.parse(JSON.stringify(newDefault)));
+    } else if (oldIdx < 0 && maintNew && !lib.some(m => m && m.id === "maintenance_mlkg")) {
+      lib.push(JSON.parse(JSON.stringify(maintNew)));
       changed = true;
     }
+    // 2026-05-23b: Seed Code-tab-only electrical therapy entries (defibrillation,
+    // cardioversion). These are hidden from "All" and search via codeOnly:true.
+    ["defibrillation", "cardioversion"].forEach(id => {
+      if (lib.some(m => m && m.id === id)) return;
+      const def = hasDefault ? DEFAULT_MEDS.find(m => m && m.id === id) : null;
+      if (def) {
+        lib.push(JSON.parse(JSON.stringify(def)));
+        changed = true;
+      }
+    });
     if (changed) {
       try { storage.setItem(STORAGE_KEY, JSON.stringify(lib)); } catch (e) {}
     }
@@ -94,8 +100,8 @@
     try { return JSON.parse(storage.getItem(STATE_KEY)) || {}; } catch (e) { return {}; }
   }
   function saveState() {
-    const { weightKg, unit, category, population, populationManual, filter } = state;
-    storage.setItem(STATE_KEY, JSON.stringify({ weightKg, unit, category, population, populationManual, filter }));
+    const { weightKg, unit, category, population, populationManual, filter, sort } = state;
+    storage.setItem(STATE_KEY, JSON.stringify({ weightKg, unit, category, population, populationManual, filter, sort }));
   }
 
   // ----------- POPULATION HELPERS -----------
@@ -492,8 +498,11 @@
   function uid() { return "med_" + Math.random().toString(36).slice(2, 9); }
 
   function getCategories() {
-    const used = new Set(library.map(m => m.category));
+    // codeOnly meds use a sentinel category ("_codeOnly") that must never appear
+    // as a tab — they're only reachable via the Code tab.
+    const used = new Set(library.filter(m => !m.codeOnly).map(m => m.category));
     DEFAULT_CATEGORIES.forEach(c => used.add(c));
+    used.delete("_codeOnly"); // belt-and-suspenders
     const all = Array.from(used);
     // If the user has a saved category order, apply it; new categories
     // (added since the order was saved) are appended to the end.
@@ -696,7 +705,8 @@
       // Code: meds with a `code:` block. We order by a natural ACLS sequence
       // (epinephrine first, then antiarrhythmics, then bradycardia, then
       // adjuncts). The order isn't user-reorderable.
-      const codeOrder = ["epinephrine", "amiodarone", "lidocaine", "atropine",
+      const codeOrder = ["defibrillation", "cardioversion",
+                         "epinephrine", "amiodarone", "lidocaine", "atropine",
                          "adenosine", "magnesium", "calcium_chloride_gtt",
                          "sodium_bicarb", "dextrose50", "naloxone"];
       const all = codeMeds();
@@ -704,6 +714,9 @@
       items = all.slice().sort((a, b) => idx(a.id) - idx(b.id));
     } else {
       items = library.filter(m => {
+        // codeOnly meds (e.g. cardioversion, defibrillation) NEVER appear outside
+        // the Code tab — not in "All", not in any named category, not in search.
+        if (m && m.codeOnly) return false;
         if (state.category !== "All" && m.category !== state.category) return false;
         return true;
       });
@@ -728,6 +741,14 @@
     }
     // Apply the user's filter (bolus/infusion/per-kg/has-ped/code/favorites).
     items = applyFilter(items, state.filter);
+    // Alphabetical sort, if requested. Skipped for the Code tab so the
+    // clinical sequence (defib → cardioversion → epi → amio → …) is preserved
+    // even when A-Z is active — alphabet is unhelpful mid-resuscitation.
+    if (state.sort === "az" && state.category !== CODE_CATEGORY) {
+      items = items.slice().sort((a, b) =>
+        (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+      );
+    }
     return items;
   }
   // Filter helper. The `state.filter` value comes from the #filter <select>.
@@ -896,6 +917,27 @@
     });
   }
 
+  // Alphabetical sort toggle. "natural" = file/custom order (default).
+  // "az" = locale-aware case-insensitive alphabetical. Sort is skipped for the
+  // Code tab (see getDisplayedMeds) so the clinical sequence is preserved.
+  const sortBtn = $("#btn-sort");
+  function syncSortBtn() {
+    if (!sortBtn) return;
+    const on = state.sort === "az";
+    sortBtn.classList.toggle("active", on);
+    sortBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    sortBtn.title = on ? "Alphabetical order (tap to disable)" : "Tap to sort alphabetically";
+  }
+  if (sortBtn) {
+    syncSortBtn();
+    sortBtn.addEventListener("click", () => {
+      state.sort = state.sort === "az" ? "natural" : "az";
+      syncSortBtn();
+      saveState();
+      renderGrid();
+    });
+  }
+
   // ----------- CALCULATOR MODAL -----------
   const calcModal = $("#calc-modal");
   const calcName = $("#calc-name");
@@ -976,7 +1018,9 @@
     const med = resolvePopulation(baseMed, state.population);
 
     calcName.textContent = med.name;
-    calcCat.textContent = med.category;
+    // codeOnly entries use a sentinel category ("_codeOnly") that shouldn't
+    // be shown to the user — surface them as "Code" instead.
+    calcCat.textContent = (med.codeOnly || baseMed.codeOnly) ? "Code" : med.category;
 
     // Sync ★ favorite toggle in the calc header.
     syncCalcFavoriteButton(id);
@@ -1059,9 +1103,191 @@
     if (med.customCalc === "maintenance_mlkg") {
       paintMaintenance(med, result);
       if (notes) notes.textContent = med.notes || "";
+    } else if (med.customCalc === "defibrillation" || med.customCalc === "cardioversion") {
+      paintElectricalTherapy(med, result);
+      if (notes) notes.textContent = med.notes || "";
     } else {
       result.innerHTML = `<div class="calc-warning">Unknown custom calculator: ${escapeHtml(med.customCalc)}</div>`;
     }
+  }
+
+  // Electrical-therapy panel (defibrillation / synchronized cardioversion).
+  // Renders weight-based joules options with an inline weight input so the
+  // user can adjust without leaving the modal. Shares pattern with paintMaintenance.
+  function paintElectricalTherapy(med, resultEl) {
+    resultEl.innerHTML = renderElectricalTherapy(med, state.weightKg);
+    const innerWeight = document.getElementById("maintenance-weight");
+    if (!innerWeight) return;
+    innerWeight.addEventListener("input", () => {
+      const raw = innerWeight.value;
+      const v = parseFloat(raw);
+      const kg = (isNaN(v) || v <= 0) ? null : v;
+      state.weightKg = kg;
+      const mainInput = document.getElementById("weight");
+      if (mainInput) {
+        if (kg === null) mainInput.value = "";
+        else mainInput.value = state.unit === "kg" ? String(v) : (kg * 2.20462).toFixed(1);
+      }
+      if (!state.populationManual) {
+        const suggestion = suggestedPopulationFromWeight(kg) || "adult";
+        if (suggestion !== state.population) applyPopulation(suggestion, false);
+        else syncPopulationVisual();
+      }
+      saveState();
+      updateWeightDerived();
+      renderGrid();
+      const caret = innerWeight.selectionStart;
+      paintElectricalTherapy(med, resultEl);
+      const refocus = document.getElementById("maintenance-weight");
+      if (refocus) {
+        refocus.focus();
+        try { refocus.setSelectionRange(caret, caret); } catch (_) {}
+      }
+    });
+  }
+
+  // Defibrillation: PALS pediatric ladder 2 → 4 → ≥4 J/kg, capped at 10 J/kg
+  // or adult equivalent (whichever lower). Adult: 200 J biphasic (escalate).
+  // Cardioversion: PALS 0.5–1 → 2 J/kg. Adult: 50–200 J depending on rhythm.
+  function renderElectricalTherapy(med, weightKg) {
+    const isPeds = state.population === "pediatric" || state.population === "neonatal";
+    const isDefib = med.customCalc === "defibrillation";
+    const weightInput = `
+      <div class="maintenance-weight-row">
+        <label for="maintenance-weight" class="maintenance-weight-label">Patient weight</label>
+        <div class="maintenance-weight-input-wrap">
+          <input id="maintenance-weight" type="number" inputmode="decimal" step="0.1" min="0" placeholder="—" value="${weightKg ? fmt(weightKg, 2) : ""}" />
+          <span class="maintenance-weight-unit">kg</span>
+        </div>
+      </div>`;
+
+    // Cap pediatric joules at 10 J/kg (defib) or 2 J/kg (cardioversion) and
+    // never exceed adult dose, per PALS 2020.
+    function pedJoules(perKg) {
+      if (!weightKg || weightKg <= 0) return null;
+      const adultCap = isDefib ? 360 : 200;
+      return Math.min(weightKg * perKg, adultCap);
+    }
+
+    if (isPeds) {
+      if (!weightKg || weightKg <= 0) {
+        return `${weightInput}
+          <div class="maintenance-empty">
+            <div class="maintenance-empty-title">Enter patient weight</div>
+            <div class="maintenance-empty-sub">Pediatric ${isDefib ? "defibrillation" : "cardioversion"} energies are weight-based.</div>
+          </div>`;
+      }
+      if (isDefib) {
+        return `${weightInput}
+          <div class="maintenance-result">
+            <div class="maintenance-headline maintenance-headline--primary">
+              <div class="maintenance-label">First shock — 2 J/kg</div>
+              <div class="maintenance-rate">${fmt(pedJoules(2), 0)} <span class="unit">J</span></div>
+              <div class="maintenance-sub">Unsynchronized — VF / pulseless VT</div>
+            </div>
+            <div class="maintenance-cards maintenance-cards--two">
+              <div class="maintenance-card">
+                <div class="maintenance-card-label">Second shock — 4 J/kg</div>
+                <div class="maintenance-card-val">${fmt(pedJoules(4), 0)} J</div>
+                <div class="maintenance-card-sub">Resume CPR 2 min, then shock</div>
+              </div>
+              <div class="maintenance-card">
+                <div class="maintenance-card-label">Subsequent — ≥4 J/kg</div>
+                <div class="maintenance-card-val">${fmt(pedJoules(4), 0)}–${fmt(pedJoules(10), 0)} J</div>
+                <div class="maintenance-card-sub">Max 10 J/kg or adult dose</div>
+              </div>
+            </div>
+            <div class="maintenance-disclaimer">
+              Unsynchronized shock. Resume CPR immediately after each shock for 2 min before pulse/rhythm check. Give epinephrine 0.01 mg/kg IV/IO q3–5 min and amiodarone 5 mg/kg (or lidocaine) after 2nd–3rd shock.
+            </div>
+          </div>`;
+      }
+      // Pediatric cardioversion
+      return `${weightInput}
+        <div class="maintenance-result">
+          <div class="maintenance-headline maintenance-headline--primary">
+            <div class="maintenance-label">Initial — 0.5–1 J/kg</div>
+            <div class="maintenance-rate">${fmt(pedJoules(0.5), 1)}–${fmt(pedJoules(1), 0)} <span class="unit">J</span></div>
+            <div class="maintenance-sub">Synchronized — unstable tachycardia w/ pulse</div>
+          </div>
+          <div class="maintenance-cards maintenance-cards--two">
+            <div class="maintenance-card">
+              <div class="maintenance-card-label">Escalate — 2 J/kg</div>
+              <div class="maintenance-card-val">${fmt(pedJoules(2), 0)} J</div>
+              <div class="maintenance-card-sub">If initial dose ineffective</div>
+            </div>
+            <div class="maintenance-card">
+              <div class="maintenance-card-label">Sedation</div>
+              <div class="maintenance-card-val">If conscious</div>
+              <div class="maintenance-card-sub">Etomidate 0.1–0.2 mg/kg or ketamine 1–2 mg/kg</div>
+            </div>
+          </div>
+          <div class="maintenance-disclaimer">
+            Synchronized shock. Confirm SYNC mode is engaged before EACH shock — most devices re-arm to unsynchronized between shocks. Consider adenosine first for stable SVT.
+          </div>
+        </div>`;
+    }
+
+    // Adult — weight not used. Show fixed-energy guidance.
+    if (isDefib) {
+      return `${weightInput}
+        <div class="maintenance-result">
+          <div class="maintenance-headline maintenance-headline--primary">
+            <div class="maintenance-label">First shock</div>
+            <div class="maintenance-rate">200 <span class="unit">J</span></div>
+            <div class="maintenance-sub">Biphasic — VF / pulseless VT (unsynchronized)</div>
+          </div>
+          <div class="maintenance-cards maintenance-cards--two">
+            <div class="maintenance-card">
+              <div class="maintenance-card-label">Subsequent shocks</div>
+              <div class="maintenance-card-val">200–360 J</div>
+              <div class="maintenance-card-sub">Escalate per manufacturer; use max if unsure</div>
+            </div>
+            <div class="maintenance-card">
+              <div class="maintenance-card-label">Monophasic (legacy)</div>
+              <div class="maintenance-card-val">360 J</div>
+              <div class="maintenance-card-sub">Use max from the first shock</div>
+            </div>
+          </div>
+          <div class="maintenance-disclaimer">
+            Unsynchronized. Resume CPR immediately after each shock for 2 min before pulse/rhythm check. Epinephrine 1 mg IV/IO q3–5 min; amiodarone 300 mg → 150 mg (or lidocaine 1–1.5 mg/kg) for refractory VF/pVT.
+          </div>
+        </div>`;
+    }
+    // Adult cardioversion
+    return `${weightInput}
+      <div class="maintenance-result">
+        <div class="maintenance-headline maintenance-headline--primary">
+          <div class="maintenance-label">Typical initial</div>
+          <div class="maintenance-rate">100 <span class="unit">J</span></div>
+          <div class="maintenance-sub">Synchronized — unstable tachycardia w/ pulse</div>
+        </div>
+        <div class="maintenance-cards">
+          <div class="maintenance-card">
+            <div class="maintenance-card-label">Narrow regular (SVT, AFlutter)</div>
+            <div class="maintenance-card-val">50–100 J</div>
+            <div class="maintenance-card-sub">Start low, escalate</div>
+          </div>
+          <div class="maintenance-card">
+            <div class="maintenance-card-label">Narrow irregular (AFib)</div>
+            <div class="maintenance-card-val">120–200 J</div>
+            <div class="maintenance-card-sub">Biphasic</div>
+          </div>
+          <div class="maintenance-card">
+            <div class="maintenance-card-label">Wide regular (monomorphic VT)</div>
+            <div class="maintenance-card-val">100 J</div>
+            <div class="maintenance-card-sub">Escalate if needed</div>
+          </div>
+          <div class="maintenance-card">
+            <div class="maintenance-card-label">Wide irregular</div>
+            <div class="maintenance-card-val">Treat as VF</div>
+            <div class="maintenance-card-sub">Unsynchronized — see Defibrillation</div>
+          </div>
+        </div>
+        <div class="maintenance-disclaimer">
+          Synchronized shock. Confirm SYNC mode is engaged before EACH shock — most devices re-arm to unsynchronized between shocks. Sedate if conscious: etomidate 0.1–0.3 mg/kg or midazolam 1–2 mg.
+        </div>
+      </div>`;
   }
 
   // Render the maintenance panel HTML and wire its inline weight input.

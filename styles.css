@@ -307,6 +307,34 @@ input[type="range"] {
   .filter-select { max-width: 150px; font-size: 14px; padding-right: 28px; }
 }
 
+/* A–Z sort toggle (sits between filter <select> and + Add button) */
+.btn-sort {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--tap); min-width: var(--tap);
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md, 10px);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-sort:hover { border-color: var(--accent); }
+.btn-sort:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+.btn-sort.active {
+  background: var(--accent);
+  color: var(--on-maize);
+  border-color: var(--accent);
+}
+.btn-sort svg { display: block; }
+@media (max-width: 520px) {
+  .btn-sort span { display: none; }
+  .btn-sort { padding: 0 10px; }
+}
+
 /* ---------- GRID ---------- */
 .grid {
   display: grid;
