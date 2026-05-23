@@ -116,11 +116,17 @@
     return !!med.populations.adult;
   }
   // Suggest a population based on weight. Returns null when no suggestion
-  // should be made (weight cleared, or adult-range weight). Threshold is the
-  // UMHS PICU 2023 cutoff (< 50 kg). Neonatal is intentionally NOT auto-
-  // suggested — it requires explicit clinician judgment.
+  // should be made (weight cleared). Thresholds:
+  //   ≤ 5 kg  → neonatal   (term newborns 2.5–4 kg, sick/preterm up to ~5 kg)
+  //   < 50 kg → pediatric  (UMHS PICU 2023 cutoff)
+  //   ≥ 50 kg → adult
+  // The 5 kg neonatal ceiling matches NRP / PALS pre-hospital practice:
+  // above ~5 kg, dose ceilings and drug behavior align with infant/pediatric
+  // protocols. Users can always override manually — the suggestion only
+  // applies until the user taps a population button.
   function suggestedPopulationFromWeight(kg) {
     if (!isFinite(kg) || kg <= 0) return null;
+    if (kg <= 5) return "neonatal";
     if (kg < 50) return "pediatric";
     return "adult";
   }
