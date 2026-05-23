@@ -1710,20 +1710,21 @@ const DEFAULT_MEDS = [
     ]
   },
   {
-    id: "maintenance_421",
-    name: "Maintenance Fluid (4-2-1)",
-    category: "Fluids",
-    type: "infusion",
-    customCalc: "maintenance_421",
+    id: "maintenance_mlkg",
+    name: "Maintenance Fluid",
+    category: "Maintenance",
+    type: "bolus",
+    customCalc: "maintenance_mlkg",
     populations: {
+      adult:     { _showInPopulation: true },
       pediatric: { _showInPopulation: true },
       neonatal:  { _showInPopulation: true }
     },
-    notes: "Holliday-Segar 4-2-1 rule for hourly pediatric maintenance fluid. Use D5½ NS + 20 mEq KCl/L (or per institution) once urine output is established. Halve rate for hypothermia, head-injured/SIADH risk; add deficit & ongoing losses on top.",
+    notes: "Weight-based isotonic crystalloid volumes (5 / 10 / 20 mL/kg). 20 mL/kg is the standard pediatric resuscitation bolus; 10 mL/kg for cautious resuscitation (neonates, cardiac, TBI/SIADH risk); 5 mL/kg for very conservative volumes. Use NS or LR; reassess after each bolus.",
     sources: [
-      { label: "Holliday MA, Segar WE. The maintenance need for water in parenteral fluid therapy. Pediatrics 1957", url: "https://publications.aap.org/pediatrics/article-abstract/19/5/823/40454" },
-      { label: "AAP Clinical Practice Guideline: Maintenance IV Fluids in Children (2018)", url: "https://publications.aap.org/pediatrics/article/142/6/e20183083/37529/Clinical-Practice-Guideline-Maintenance" },
-      { label: "Nelson Pediatric Symptom-Based Diagnosis — Fluid & Electrolyte Therapy", url: "https://www.elsevier.com/books/nelson-pediatric-symptom-based-diagnosis/kliegman/978-0-323-39956-2" }
+      { label: "PALS 2020 — Shock & Fluid Resuscitation", url: "https://cpr.heart.org/en/cpr-courses-and-kits/healthcare-professional/pals" },
+      { label: "Surviving Sepsis Campaign: Pediatrics 2020", url: "https://www.sccm.org/SurvivingSepsisCampaign/Guidelines/Pediatric-Patients" },
+      { label: "ATLS 10th Edition — Shock", url: "https://www.facs.org/quality-programs/trauma/education/advanced-trauma-life-support/" }
     ]
   },
   {
@@ -2257,6 +2258,7 @@ const DEFAULT_CATEGORIES = [
   "Reversal",
   "Toxicology",
   "Electrolytes",
+  "Maintenance",
   "Cardiac",
   "Other",
   "Custom"

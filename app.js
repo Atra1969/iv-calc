@@ -55,10 +55,37 @@
       const raw = storage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length) return parsed;
+        if (Array.isArray(parsed) && parsed.length) {
+          return migrateLibrary(parsed);
+        }
       }
     } catch (e) {}
     return JSON.parse(JSON.stringify(DEFAULT_MEDS));
+  }
+  // Lightweight in-place migrations applied to a cached library so returning
+  // users pick up structural changes without wiping their customizations.
+  // Each migration is idempotent and safe to run repeatedly.
+  function migrateLibrary(lib) {
+    let changed = false;
+    // 2026-05-23: Replace the old Holliday-Segar 4-2-1 "Maintenance Fluid (4-2-1)"
+    // entry under "Fluids" with the new simple 5/10/20 mL/kg calculator under a
+    // dedicated "Maintenance" category. (4-2-1 is for burns, not maintenance.)
+    const oldIdx = lib.findIndex(m => m && m.id === "maintenance_421");
+    const newDefault = (typeof DEFAULT_MEDS !== "undefined")
+      ? DEFAULT_MEDS.find(m => m && m.id === "maintenance_mlkg")
+      : null;
+    if (oldIdx >= 0 && newDefault) {
+      lib.splice(oldIdx, 1, JSON.parse(JSON.stringify(newDefault)));
+      changed = true;
+    } else if (oldIdx < 0 && newDefault && !lib.some(m => m && m.id === "maintenance_mlkg")) {
+      // Old entry already gone but the new one wasn't seeded — add it.
+      lib.push(JSON.parse(JSON.stringify(newDefault)));
+      changed = true;
+    }
+    if (changed) {
+      try { storage.setItem(STORAGE_KEY, JSON.stringify(lib)); } catch (e) {}
+    }
+    return lib;
   }
   function saveLibrary() {
     storage.setItem(STORAGE_KEY, JSON.stringify(library));
@@ -1029,7 +1056,7 @@
     hideStandardCalcControls();
     const result = document.getElementById("calc-result");
     const notes = document.getElementById("calc-notes");
-    if (med.customCalc === "maintenance_421") {
+    if (med.customCalc === "maintenance_mlkg") {
       paintMaintenance(med, result);
       if (notes) notes.textContent = med.notes || "";
     } else {
@@ -1042,7 +1069,7 @@
   // live without closing the modal.
   function paintMaintenance(med, resultEl) {
     const focusKg = state.weightKg;
-    resultEl.innerHTML = renderMaintenance421(focusKg);
+    resultEl.innerHTML = renderMaintenanceMlkg(focusKg);
     const innerWeight = document.getElementById("maintenance-weight");
     if (!innerWeight) return;
     // Keep the cursor at the end after re-render.
@@ -1080,30 +1107,19 @@
     });
   }
 
-  // Holliday-Segar 4-2-1 maintenance fluid rate.
-  //   First 10 kg:  4 mL/kg/hr
-  //   Next 10 kg:   2 mL/kg/hr
-  //   Each kg >20:  1 mL/kg/hr
-  // Adult shortcut: weight + 40 mL/hr (≥ 20 kg). Daily total ≈ hourly × 24.
-  function calcMaintenance421(weightKg) {
+  // Weight-based isotonic crystalloid volumes for resuscitation / maintenance
+  // bolus dosing. Returns 5, 10, and 20 mL/kg results based on entered weight.
+  function calcMaintenanceMlkg(weightKg) {
     if (!weightKg || weightKg <= 0) return null;
-    let first = Math.min(weightKg, 10) * 4;
-    let second = Math.max(0, Math.min(weightKg - 10, 10)) * 2;
-    let third = Math.max(0, weightKg - 20) * 1;
-    const mlPerHr = first + second + third;
     return {
-      mlPerHr,
-      mlPerDay: mlPerHr * 24,
-      breakdown: {
-        first10: { kg: Math.min(weightKg, 10), rate: 4, mlPerHr: first },
-        next10:  { kg: Math.max(0, Math.min(weightKg - 10, 10)), rate: 2, mlPerHr: second },
-        rest:    { kg: Math.max(0, weightKg - 20), rate: 1, mlPerHr: third }
-      }
+      five:      weightKg * 5,
+      ten:       weightKg * 10,
+      twenty:    weightKg * 20
     };
   }
 
-  function renderMaintenance421(weightKg) {
-    const r = calcMaintenance421(weightKg);
+  function renderMaintenanceMlkg(weightKg) {
+    const r = calcMaintenanceMlkg(weightKg);
     // Always render a weight input inside the modal so the clinician can
     // tweak it without closing the modal first (the <dialog> is modal and
     // blocks the patient-strip input behind it).
@@ -1119,52 +1135,30 @@
       return `${weightInput}
       <div class="maintenance-empty">
         <div class="maintenance-empty-title">Enter patient weight</div>
-        <div class="maintenance-empty-sub">Maintenance rate is calculated from weight using the Holliday-Segar 4-2-1 rule.</div>
+        <div class="maintenance-empty-sub">Volumes are calculated as 5, 10, and 20 mL/kg of isotonic crystalloid.</div>
       </div>`;
-    }
-    const b = r.breakdown;
-    const halfRate = r.mlPerHr / 2;
-    const rows = [];
-    if (b.first10.kg > 0) {
-      rows.push(`<tr><td>First ${fmt(b.first10.kg, 1)} kg</td><td>× 4 mL/kg/hr</td><td class="num">${fmt(b.first10.mlPerHr, 1)} mL/hr</td></tr>`);
-    }
-    if (b.next10.kg > 0) {
-      rows.push(`<tr><td>Next ${fmt(b.next10.kg, 1)} kg</td><td>× 2 mL/kg/hr</td><td class="num">${fmt(b.next10.mlPerHr, 1)} mL/hr</td></tr>`);
-    }
-    if (b.rest.kg > 0) {
-      rows.push(`<tr><td>Remaining ${fmt(b.rest.kg, 1)} kg</td><td>× 1 mL/kg/hr</td><td class="num">${fmt(b.rest.mlPerHr, 1)} mL/hr</td></tr>`);
     }
     return `${weightInput}
       <div class="maintenance-result">
-        <div class="maintenance-headline">
-          <div class="maintenance-label">Maintenance rate</div>
-          <div class="maintenance-rate">${fmt(r.mlPerHr, 1)} <span class="unit">mL/hr</span></div>
-          <div class="maintenance-sub">≈ ${fmt(r.mlPerDay, 0)} mL / 24 hr</div>
+        <div class="maintenance-headline maintenance-headline--primary">
+          <div class="maintenance-label">20 mL/kg bolus</div>
+          <div class="maintenance-rate">${fmt(r.twenty, 0)} <span class="unit">mL</span></div>
+          <div class="maintenance-sub">Standard resuscitation bolus (PALS / sepsis)</div>
         </div>
-        <table class="maintenance-breakdown">
-          <thead><tr><th>Weight band</th><th>Rate</th><th class="num">Hourly</th></tr></thead>
-          <tbody>${rows.join("")}</tbody>
-          <tfoot><tr><th colspan="2">Total (4-2-1)</th><th class="num">${fmt(r.mlPerHr, 1)} mL/hr</th></tr></tfoot>
-        </table>
-        <div class="maintenance-cards">
+        <div class="maintenance-cards maintenance-cards--two">
           <div class="maintenance-card">
-            <div class="maintenance-card-label">½-maintenance</div>
-            <div class="maintenance-card-val">${fmt(halfRate, 1)} mL/hr</div>
-            <div class="maintenance-card-sub">For TBI/SIADH risk, hypoNa</div>
+            <div class="maintenance-card-label">10 mL/kg bolus</div>
+            <div class="maintenance-card-val">${fmt(r.ten, 0)} mL</div>
+            <div class="maintenance-card-sub">Cautious bolus — neonate, cardiac, TBI/SIADH risk</div>
           </div>
           <div class="maintenance-card">
-            <div class="maintenance-card-label">Bolus dose</div>
-            <div class="maintenance-card-val">${fmt(weightKg * 20, 0)} mL</div>
-            <div class="maintenance-card-sub">20 mL/kg isotonic (shock)</div>
-          </div>
-          <div class="maintenance-card">
-            <div class="maintenance-card-label">Deficit (if 10% dehydrated)</div>
-            <div class="maintenance-card-val">${fmt(weightKg * 100, 0)} mL</div>
-            <div class="maintenance-card-sub">Replace ½ over 8h, ½ over 16h</div>
+            <div class="maintenance-card-label">5 mL/kg bolus</div>
+            <div class="maintenance-card-val">${fmt(r.five, 0)} mL</div>
+            <div class="maintenance-card-sub">Conservative — fluid-restricted / fragile patient</div>
           </div>
         </div>
         <div class="maintenance-disclaimer">
-          Use D5½ NS + 20 mEq KCl/L (or per protocol). Halve rate in head injury, SIADH risk, post-op. Reassess q4–6 h with electrolytes & UOP.
+          Isotonic crystalloid (NS or LR). Reassess hemodynamics and lung exam after each bolus; titrate to perfusion endpoints rather than fixed totals.
         </div>
       </div>`;
   }
