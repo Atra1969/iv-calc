@@ -38,8 +38,8 @@ function resolvePopulation(med, pop) {
   const pops = (med && med.populations) || {};
   const overlays = [];
   if (pop === "neonatal") {
+    if (pops.pediatric) overlays.push(pops.pediatric);
     if (pops.neonatal) overlays.push(pops.neonatal);
-    else if (pops.pediatric) overlays.push(pops.pediatric);
   } else if (pop === "pediatric") {
     if (pops.pediatric) overlays.push(pops.pediatric);
   } else {
@@ -73,6 +73,35 @@ function calcDose(med, mode, concIdx, weightKg, dose) {
   else mL = cfg.perTime === "min" ? (doseInConcUnit / concPerMl) * 60 : (doseInConcUnit / concPerMl);
 
   return { totalDose, mL, concPerMl, concUnit, unitMismatch: factor === null };
+}
+
+// Pure inverse of calcDose: given a volume (mL for bolus, mL/hr for infusion),
+// solve for the dose in cfg.doseUnit (per kg if cfg.perKg).  Mirror of
+// solveDoseFromVolumePure() in app.js.
+function solveDoseFromVolume(med, mode, concIdx, weightKg, mL) {
+  if (!med) return { error: "no_med" };
+  const cfg = med[mode];
+  if (!cfg) return { error: "no_mode" };
+  const concs = getConcs(med, mode);
+  const conc = concs[concIdx] || concs[0];
+  if (!conc) return { error: "no_conc" };
+  if (!isFinite(mL) || mL < 0) return { error: "bad_volume" };
+  if (cfg.perKg && (!weightKg || weightKg <= 0)) return { error: "need_weight" };
+
+  const concUnit = conc.isUnits ? (conc.unitsLabel || "units") : "mg";
+  const concPerMl = conc.mg / conc.mL;
+  const factor = unitFactor(cfg.doseUnit, concUnit);
+  if (factor === null) return { error: "unit_mismatch" };
+
+  let totalDoseInConcUnit;
+  if (mode === "bolus") totalDoseInConcUnit = mL * concPerMl;
+  else {
+    const mlPerTime = cfg.perTime === "min" ? mL / 60 : mL;
+    totalDoseInConcUnit = mlPerTime * concPerMl;
+  }
+  const totalDose = totalDoseInConcUnit / factor;
+  const dose = cfg.perKg ? totalDose / weightKg : totalDose;
+  return { dose, totalDose };
 }
 
 // ---- Test harness ----
@@ -116,32 +145,33 @@ const CASES = [
   { id: "phenylephrine", mode: "bolus", concIdx: 0, w: null, dose: 100, expMl: 1, expTotal: 100 },
 
   // ---- Pressors: infusion ----
-  // Epi infusion 8 mg / 250 mL = 32 mcg/mL. Dose 0.05 mcg/kg/min × 70 kg = 3.5 mcg/min.
-  // mL/min = 3.5/32 = 0.109375. mL/hr = 6.5625
-  { id: "epinephrine", mode: "infusion", concIdx: 0, w: 70, dose: 0.05, expMl: 6.5625, expTotal: 3.5 },
-  // Norepi 16 mcg/mL. 0.1 mcg/kg/min × 80 kg = 8 mcg/min → 0.5 mL/min → 30 mL/hr
-  { id: "norepinephrine", mode: "infusion", concIdx: 0, w: 80, dose: 0.1, expMl: 30, expTotal: 8 },
-  // Norepi @ 32 mcg/mL: same dose → 15 mL/hr
-  { id: "norepinephrine", mode: "infusion", concIdx: 1, w: 80, dose: 0.1, expMl: 15, expTotal: 8 },
+  // Epi infusion 5 mg / 250 mL = 20 mcg/mL (UMHS 2023). Dose 0.05 mcg/kg/min × 70 kg = 3.5 mcg/min.
+  // mL/min = 3.5/20 = 0.175. mL/hr = 10.5
+  { id: "epinephrine", mode: "infusion", concIdx: 0, w: 70, dose: 0.05, expMl: 10.5, expTotal: 3.5 },
+  // Norepi 16 mg / 250 mL = 64 mcg/mL (UMHS 2023 single std conc). 0.1 mcg/kg/min × 80 kg = 8 mcg/min → 8/64 mL/min → 7.5 mL/hr
+  { id: "norepinephrine", mode: "infusion", concIdx: 0, w: 80, dose: 0.1, expMl: 7.5, expTotal: 8 },
   // Phenylephrine drip (UMHS adult: NOT per-kg; mcg/min) 10 mg / 250 mL = 40 mcg/mL.
   //   100 mcg/min → 2.5 mL/min → 150 mL/hr
   { id: "phenylephrine", mode: "infusion", concIdx: 0, w: null, dose: 100, expMl: 150, expTotal: 100 },
   //   200 mcg/mL conc, 100 mcg/min → 0.5 mL/min → 30 mL/hr
   { id: "phenylephrine", mode: "infusion", concIdx: 1, w: null, dose: 100, expMl: 30, expTotal: 100 },
-  // Vasopressin 0.04 units/min @ 0.2 u/mL = 0.2 mL/min = 12 mL/hr (NOT per kg)
-  { id: "vasopressin", mode: "infusion", concIdx: 0, w: null, dose: 0.04, expMl: 12, expTotal: 0.04 },
-  // Dopamine 1600 mcg/mL. 5 mcg/kg/min × 80 kg = 400 mcg/min → 0.25 mL/min → 15 mL/hr
-  { id: "dopamine", mode: "infusion", concIdx: 0, w: 80, dose: 5, expMl: 15, expTotal: 400 },
-  // Dobutamine 2000 mcg/mL. 5 × 80 = 400 mcg/min → 0.2 mL/min → 12 mL/hr
-  { id: "dobutamine", mode: "infusion", concIdx: 0, w: 80, dose: 5, expMl: 12, expTotal: 400 },
+  // Vasopressin 40 u / 40 mL = 1 u/mL (UMHS 2023). 0.04 u/min ÷ 1 = 0.04 mL/min → 2.4 mL/hr (NOT per kg)
+  { id: "vasopressin", mode: "infusion", concIdx: 0, w: null, dose: 0.04, expMl: 2.4, expTotal: 0.04 },
+  // Dopamine 800 mg / 250 mL = 3200 mcg/mL (UMHS 2023 std). 5 mcg/kg/min × 80 kg = 400 mcg/min → 400/3200 mL/min → 7.5 mL/hr
+  { id: "dopamine", mode: "infusion", concIdx: 0, w: 80, dose: 5, expMl: 7.5, expTotal: 400 },
+  // Dobutamine 1000 mg / 250 mL = 4000 mcg/mL (UMHS 2023 std). 5 × 80 = 400 mcg/min → 400/4000 mL/min → 6 mL/hr
+  { id: "dobutamine", mode: "infusion", concIdx: 0, w: 80, dose: 5, expMl: 6, expTotal: 400 },
 
   // ---- Sedation ----
   // Ketamine induction 1.5 mg/kg × 80 kg = 120 mg @ 100 mg/mL = 1.2 mL
-  { id: "ketamine", mode: "bolus", concIdx: 0, w: 80, dose: 1.5, expMl: 1.2, expTotal: 120 },
-  // Ketamine 50 mg/mL: 120 mg → 2.4 mL
-  { id: "ketamine", mode: "bolus", concIdx: 1, w: 80, dose: 1.5, expMl: 2.4, expTotal: 120 },
-  // Ketamine drip 2 mg/mL. 1 mg/kg/hr × 70 kg = 70 mg/hr → 35 mL/hr
-  { id: "ketamine", mode: "infusion", concIdx: 0, w: 70, dose: 1, expMl: 35, expTotal: 70 },
+  // Ketamine concIdx 0 = 20 mg/mL (user protocol) → 120 mg / 20 = 6 mL
+  { id: "ketamine", mode: "bolus", concIdx: 0, w: 80, dose: 1.5, expMl: 6, expTotal: 120 },
+  // Ketamine 100 mg/mL at new concIdx 1
+  { id: "ketamine", mode: "bolus", concIdx: 1, w: 80, dose: 1.5, expMl: 1.2, expTotal: 120 },
+  // Ketamine 50 mg/mL at new concIdx 2: 120 mg → 2.4 mL
+  { id: "ketamine", mode: "bolus", concIdx: 2, w: 80, dose: 1.5, expMl: 2.4, expTotal: 120 },
+  // Ketamine drip 2500 mg / 250 mL = 10 mg/mL (UMHS 2023). 1 mg/kg/hr × 70 kg = 70 mg/hr → 7 mL/hr
+  { id: "ketamine", mode: "infusion", concIdx: 0, w: 70, dose: 1, expMl: 7, expTotal: 70 },
   // Etomidate 0.3 mg/kg × 80 kg = 24 mg @ 2 mg/mL = 12 mL
   { id: "etomidate", mode: "bolus", concIdx: 0, w: 80, dose: 0.3, expMl: 12, expTotal: 24 },
   // Propofol induction 1.5 mg/kg × 80 = 120 mg @ 10 mg/mL = 12 mL
@@ -161,13 +191,16 @@ const CASES = [
   // ---- Analgesics ----
   // Fentanyl bolus 50 mcg/mL. 1 mcg/kg × 70 = 70 mcg → 70/50 = 1.4 mL
   { id: "fentanyl", mode: "bolus", concIdx: 0, w: 70, dose: 1, expMl: 1.4, expTotal: 70 },
-  // Fentanyl drip (UMHS adult: NOT per-kg; mcg/hr) 2500 mcg / 250 mL = 10 mcg/mL.
-  //   50 mcg/hr / 10 = 5 mL/hr
-  { id: "fentanyl", mode: "infusion", concIdx: 0, w: null, dose: 50, expMl: 5, expTotal: 50 },
-  // Morphine 1 mg/mL. 0.1 mg/kg × 70 = 7 mg → 7 mL
-  { id: "morphine", mode: "bolus", concIdx: 0, w: 70, dose: 0.1, expMl: 7, expTotal: 7 },
-  // Morphine 5 mg/mL: 7 mg → 1.4 mL
-  { id: "morphine", mode: "bolus", concIdx: 1, w: 70, dose: 0.1, expMl: 1.4, expTotal: 7 },
+  // Fentanyl drip: concIdx 0 = 50 mcg/mL (user protocol, 1500/30) → 50 mcg/hr / 50 = 1 mL/hr
+  { id: "fentanyl", mode: "infusion", concIdx: 0, w: null, dose: 50, expMl: 1, expTotal: 50 },
+  // Fentanyl drip 10 mcg/mL premix at new concIdx 1 → 5 mL/hr
+  { id: "fentanyl", mode: "infusion", concIdx: 1, w: null, dose: 50, expMl: 5, expTotal: 50 },
+  // Morphine concIdx 0 = 10 mg/mL (user protocol) → 7 mg / 10 = 0.7 mL
+  { id: "morphine", mode: "bolus", concIdx: 0, w: 70, dose: 0.1, expMl: 0.7, expTotal: 7 },
+  // Morphine 1 mg/mL at new concIdx 1 → 7 mL
+  { id: "morphine", mode: "bolus", concIdx: 1, w: 70, dose: 0.1, expMl: 7, expTotal: 7 },
+  // Morphine 5 mg/mL at new concIdx 2 → 1.4 mL
+  { id: "morphine", mode: "bolus", concIdx: 2, w: 70, dose: 0.1, expMl: 1.4, expTotal: 7 },
   // Hydromorphone 1 mg/mL. 0.015 × 70 = 1.05 mg → 1.05 mL
   { id: "hydromorphone", mode: "bolus", concIdx: 0, w: 70, dose: 0.015, expMl: 1.05, expTotal: 1.05 },
   // Ketorolac 30 mg/mL. 30 mg → 1 mL
@@ -244,6 +277,13 @@ const CASES = [
   { id: "heparin", mode: "infusion", concIdx: 0, w: 80, dose: 18, expMl: 14.4, expTotal: 1440 },
   // TXA 100 mg/mL. 1000 mg → 10 mL
   { id: "tranexamic", mode: "bolus", concIdx: 0, w: null, dose: 1000, expMl: 10, expTotal: 1000 },
+  // === User-protocol concentration tests (defaults must match carried concentrations) ===
+  // Vecuronium infusion @ user-protocol 1 mg/mL = 1000 mcg/mL. 1 mcg/kg/min × 80 = 80 mcg/min → 80/1000 = 0.08 mL/min → 4.8 mL/hr
+  { id: "vecuronium", mode: "infusion", concIdx: 0, w: 80, dose: 1, expMl: 4.8, expTotal: 80 },
+  // Vecuronium infusion premix 200 mcg/mL at new concIdx 1
+  { id: "vecuronium", mode: "infusion", concIdx: 1, w: 80, dose: 1, expMl: 24, expTotal: 80 },
+  // 3% Saline (hypertonic): 3 mL/kg × 70 kg → 210 mL
+  { id: "hypertonic_saline_3", mode: "bolus", concIdx: 0, w: 70, dose: 3, expMl: 210, expTotal: 210 },
   // Nicardipine 0.1 mg/mL. 5 mg/hr → 50 mL/hr
   { id: "nicardipine", mode: "infusion", concIdx: 0, w: null, dose: 5, expMl: 50, expTotal: 5 },
   // NTG 200 mcg/mL. 10 mcg/min → 0.05 mL/min → 3 mL/hr
@@ -288,8 +328,10 @@ const PED_CASES = [
   { id: "epinephrine", mode: "infusion", concIdx: 0, w: 10, dose: 0.05, expMl: 1.875, expTotal: 0.5 },
   // Pediatric propofol 20 kg @ 100 mcg/kg/min, 10 mg/mL = 10000 mcg/mL → 2000 mcg/min × 60 / 10000 = 12 mL/hr
   { id: "propofol", mode: "infusion", concIdx: 0, w: 20, dose: 100, expMl: 12, expTotal: 2000 },
-  // Pediatric fentanyl 10 kg @ 1 mcg/kg/hr, 10 mcg/mL → 10 mcg/hr / 10 = 1 mL/hr
-  { id: "fentanyl", mode: "infusion", concIdx: 0, w: 10, dose: 1, expMl: 1, expTotal: 10 },
+  // Pediatric fentanyl 10 kg @ 1 mcg/kg/hr; after reorder, concIdx 0 = 50 mcg/mL (user protocol) → 10/50 = 0.2 mL/hr
+  { id: "fentanyl", mode: "infusion", concIdx: 0, w: 10, dose: 1, expMl: 0.2, expTotal: 10 },
+  // Same case, original 10 mcg/mL premix at new concIdx 1
+  { id: "fentanyl", mode: "infusion", concIdx: 1, w: 10, dose: 1, expMl: 1, expTotal: 10 },
   // Pediatric nicardipine 20 kg @ 1 mcg/kg/min, 0.1 mg/mL = 100 mcg/mL → 20 mcg/min × 60 / 100 = 12 mL/hr
   { id: "nicardipine", mode: "infusion", concIdx: 0, w: 20, dose: 1, expMl: 12, expTotal: 20 },
   // Pediatric midazolam 15 kg @ 50 mcg/kg/hr, 1 mg/mL = 1000 mcg/mL → 750 mcg/hr / 1000 = 0.75 mL/hr
@@ -500,7 +542,8 @@ console.log(`\n=== Pass 5: edge cases ===`);
 // Null weight on non-perKg
 {
   const r = calcDose(findMed("vasopressin"), "infusion", 0, null, 0.04);
-  expect("vasopressin no-weight mL/hr", r.mL, 12, 1e-9);
+  // 40 u / 40 mL = 1 u/mL; 0.04 u/min → 2.4 mL/hr
+  expect("vasopressin no-weight mL/hr", r.mL, 2.4, 1e-9);
 }
 // Negative weight on perKg
 {
@@ -511,16 +554,76 @@ console.log(`\n=== Pass 5: edge cases ===`);
 // Tiny weight (3 kg neonate) round trip
 {
   const r = calcDose(findMed("epinephrine"), "infusion", 0, 3, 0.1);
-  // 0.1 × 3 = 0.3 mcg/min; 32 mcg/mL → 0.009375 mL/min → 0.5625 mL/hr
-  expect("3kg epi drip", r.mL, 0.5625, 1e-9);
+  // 0.1 × 3 = 0.3 mcg/min; 20 mcg/mL (UMHS 2023) → 0.015 mL/min → 0.9 mL/hr
+  expect("3kg epi drip", r.mL, 0.9, 1e-9);
 }
 // Massive dose (>= cap) still computes
 {
-  const r = calcDose(findMed("ketamine"), "bolus", 0, 200, 5);
+  // Use concIdx 1 (100 mg/mL after user-protocol reorder) so this exercises a high-conc oversized case.
+  const r = calcDose(findMed("ketamine"), "bolus", 1, 200, 5);
   // 5 × 200 = 1000 mg / 100 mg/mL = 10 mL
   expect("oversized ketamine still computes", r.mL, 10, 1e-9);
   if (r.totalDose <= findMed("ketamine").bolus.maxAbsolute) {
     fail++; failures.push("ketamine over-cap totalDose should exceed cap");
+  } else pass++;
+}
+
+// =================================================================
+// CASE 6: Reverse-calc round trips.
+// For every forward case (adult + pediatric), feed the computed mL into
+// solveDoseFromVolume() and confirm it returns the original dose.  This
+// validates the inverse function against every dose/mode/concentration/
+// per-kg/units permutation in the library.
+// =================================================================
+console.log(`\n=== Pass 6: reverse-calc round trips ===`);
+for (const c of CASES) {
+  const med = findMed(c.id);
+  const forward = calcDose(med, c.mode, c.concIdx, c.w, c.dose);
+  if (forward.error || forward.needsWeight) continue;
+  const back = solveDoseFromVolume(med, c.mode, c.concIdx, c.w, forward.mL);
+  if (back.error) {
+    fail++; failures.push(`FAIL reverse ${c.id}/${c.mode}: ${back.error}`);
+    continue;
+  }
+  expect(`reverse ${c.id} ${c.mode} #${c.concIdx} dose`, back.dose, c.dose, 1e-9);
+}
+for (const c of PED_CASES) {
+  const med = resolvePopulation(findMed(c.id), "pediatric");
+  const forward = calcDose(med, c.mode, c.concIdx, c.w, c.dose);
+  if (forward.error || forward.needsWeight) continue;
+  const back = solveDoseFromVolume(med, c.mode, c.concIdx, c.w, forward.mL);
+  if (back.error) {
+    fail++; failures.push(`FAIL reverse ped ${c.id}/${c.mode}: ${back.error}`);
+    continue;
+  }
+  expect(`reverse ped ${c.id} ${c.mode} #${c.concIdx} dose`, back.dose, c.dose, 1e-9);
+}
+// Spot-check a few extreme volumes solve correctly.
+{
+  // Vasopressin 40u/40mL = 1u/mL: 2.4 mL/hr → 0.04 u/min
+  const r = solveDoseFromVolume(findMed("vasopressin"), "infusion", 0, null, 2.4);
+  expect("reverse vasopressin 2.4 mL/hr", r.dose, 0.04, 1e-9);
+}
+{
+  // Norepi 16mg/250mL = 64 mcg/mL, 80kg: 7.5 mL/hr → 0.1 mcg/kg/min
+  const r = solveDoseFromVolume(findMed("norepinephrine"), "infusion", 0, 80, 7.5);
+  expect("reverse norepi 7.5 mL/hr 80kg", r.dose, 0.1, 1e-9);
+}
+{
+  // Epi bolus 10 mcg/mL: 1 mL → 10 mcg
+  const r = solveDoseFromVolume(findMed("epinephrine"), "bolus", 0, null, 1);
+  expect("reverse epi bolus 1 mL", r.dose, 10, 1e-9);
+}
+{
+  // Reverse with zero volume → zero dose (defensive)
+  const r = solveDoseFromVolume(findMed("norepinephrine"), "infusion", 0, 70, 0);
+  expect("reverse norepi 0 mL/hr", r.dose, 0, 1e-9);
+}
+{
+  // Reverse requires weight on perKg meds
+  const r = solveDoseFromVolume(findMed("norepinephrine"), "infusion", 0, null, 7.5);
+  if (r.error !== "need_weight") {
+    fail++; failures.push("reverse norepi w/o weight should require weight");
   } else pass++;
 }
 

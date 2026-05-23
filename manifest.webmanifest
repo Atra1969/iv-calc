@@ -1,0 +1,20 @@
+{
+  "name": "IV Dosing Calculator",
+  "short_name": "IV Dosing",
+  "description": "Emergency & critical care IV dosing and code drug calculator for flight, ED, ICU, and prehospital use.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#00274C",
+  "theme_color": "#00274C",
+  "lang": "en",
+  "categories": ["medical", "health", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}
