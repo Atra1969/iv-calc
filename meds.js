@@ -1710,6 +1710,23 @@ const DEFAULT_MEDS = [
     ]
   },
   {
+    id: "maintenance_421",
+    name: "Maintenance Fluid (4-2-1)",
+    category: "Fluids",
+    type: "infusion",
+    customCalc: "maintenance_421",
+    populations: {
+      pediatric: { _showInPopulation: true },
+      neonatal:  { _showInPopulation: true }
+    },
+    notes: "Holliday-Segar 4-2-1 rule for hourly pediatric maintenance fluid. Use D5½ NS + 20 mEq KCl/L (or per institution) once urine output is established. Halve rate for hypothermia, head-injured/SIADH risk; add deficit & ongoing losses on top.",
+    sources: [
+      { label: "Holliday MA, Segar WE. The maintenance need for water in parenteral fluid therapy. Pediatrics 1957", url: "https://publications.aap.org/pediatrics/article-abstract/19/5/823/40454" },
+      { label: "AAP Clinical Practice Guideline: Maintenance IV Fluids in Children (2018)", url: "https://publications.aap.org/pediatrics/article/142/6/e20183083/37529/Clinical-Practice-Guideline-Maintenance" },
+      { label: "Nelson Pediatric Symptom-Based Diagnosis — Fluid & Electrolyte Therapy", url: "https://www.elsevier.com/books/nelson-pediatric-symptom-based-diagnosis/kliegman/978-0-323-39956-2" }
+    ]
+  },
+  {
     id: "hypertonic_saline_3",
     name: "3% Saline (Hypertonic)",
     category: "Fluids",

@@ -32,7 +32,27 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
+html, body {
+  margin: 0;
+  padding: 0;
+  /* iOS standalone-PWA fix: prevent the app from being "swiped closed" when
+     the user scrolls. `overscroll-behavior: none` blocks rubber-banding
+     from being interpreted as the back-navigation / dismiss gesture.
+     `overflow-x: hidden` blocks horizontal-pan misfires. */
+  overscroll-behavior: none;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+  /* Disable iOS pull-to-refresh and standalone-dismiss on the root only;
+     children scroll normally. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Re-enable text selection where the user actually needs it. */
+input, textarea, .selectable, [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, system-ui, sans-serif;
   background: radial-gradient(1200px 600px at 0% -10%, #0a3464 0%, var(--bg) 60%) no-repeat,
@@ -43,7 +63,6 @@ body {
   line-height: 1.4;
   min-height: 100vh;
   padding-bottom: env(safe-area-inset-bottom);
-  overscroll-behavior-y: contain;
 }
 
 button { font: inherit; color: inherit; cursor: pointer; }
@@ -1257,3 +1276,125 @@ button, .btn-install, .cats button, [data-pop] {
   border-radius: 8px;
 }
 .ios-install-close:hover { background: rgba(255,255,255,0.08); color: var(--text, #fff); }
+
+/* =========================================================
+   Maintenance Fluid (4-2-1) custom calculator
+   ========================================================= */
+.maintenance-empty {
+  text-align: center;
+  padding: 28px 12px;
+  background: var(--surface-2, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border, rgba(255,255,255,0.18));
+  border-radius: 12px;
+}
+.maintenance-empty-title { font-size: 16px; font-weight: 700; color: var(--accent, #FFCB05); }
+.maintenance-empty-sub { font-size: 13px; color: var(--text-muted, #c8d6e8); margin-top: 6px; }
+
+.maintenance-result { display: flex; flex-direction: column; gap: 14px; }
+
+.maintenance-headline {
+  background: linear-gradient(135deg, rgba(255,203,5,0.14), rgba(255,203,5,0.04));
+  border: 1px solid rgba(255,203,5,0.35);
+  border-radius: 14px;
+  padding: 16px 18px;
+  text-align: center;
+}
+.maintenance-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted, #c8d6e8); font-weight: 700;
+}
+.maintenance-rate {
+  font-size: 38px; font-weight: 800; color: var(--accent, #FFCB05);
+  font-variant-numeric: tabular-nums; margin-top: 4px; line-height: 1.1;
+}
+.maintenance-rate .unit { font-size: 18px; font-weight: 600; color: var(--text, #fff); margin-left: 4px; }
+.maintenance-sub { font-size: 13px; color: var(--text-muted, #c8d6e8); margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+.maintenance-breakdown {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: var(--surface-2, rgba(255,255,255,0.03));
+  border-radius: 10px;
+  overflow: hidden;
+}
+.maintenance-breakdown th, .maintenance-breakdown td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.10));
+  text-align: left;
+}
+.maintenance-breakdown thead th {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted, #c8d6e8); font-weight: 700;
+  background: rgba(255,255,255,0.03);
+}
+.maintenance-breakdown td:nth-child(2) { color: var(--text-muted, #c8d6e8); font-size: 13px; }
+.maintenance-breakdown .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.maintenance-breakdown tfoot th {
+  background: rgba(255,203,5,0.08);
+  color: var(--accent, #FFCB05);
+  font-weight: 700; font-size: 13px;
+}
+.maintenance-breakdown tfoot th.num { text-align: right; }
+.maintenance-breakdown tbody tr:last-child td { border-bottom: none; }
+
+.maintenance-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+.maintenance-card {
+  background: var(--surface-2, rgba(255,255,255,0.04));
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.maintenance-card-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted, #c8d6e8); font-weight: 700;
+}
+.maintenance-card-val {
+  font-size: 18px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text, #fff); margin-top: 2px;
+}
+.maintenance-card-sub { font-size: 11px; color: var(--text-muted, #c8d6e8); margin-top: 2px; line-height: 1.3; }
+
+.maintenance-disclaimer {
+  font-size: 12px;
+  color: var(--text-muted, #c8d6e8);
+  background: rgba(255,255,255,0.03);
+  border-left: 3px solid var(--accent, #FFCB05);
+  padding: 10px 12px;
+  border-radius: 6px;
+  line-height: 1.5;
+}
+
+/* Inline weight input inside the maintenance modal */
+.maintenance-weight-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-2, rgba(255,255,255,0.04));
+  border: 1px solid var(--border, rgba(255,255,255,0.14));
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.maintenance-weight-label {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted, #c8d6e8); font-weight: 700;
+  flex-shrink: 0;
+}
+.maintenance-weight-input-wrap {
+  display: flex; align-items: center; gap: 6px;
+  flex: 1; min-width: 0;
+}
+.maintenance-weight-input-wrap input {
+  flex: 1; min-width: 0;
+  font-size: 18px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding: 8px 10px;
+}
+.maintenance-weight-unit {
+  color: var(--accent, #FFCB05); font-weight: 700; font-size: 14px;
+}

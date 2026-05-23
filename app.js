@@ -729,12 +729,8 @@
     // Only applies to pediatric / neonatal — adult is the baseline so the
     // outline would be noise. The class is added below in the template.
     const showPopHighlight = state.population === "pediatric" || state.population === "neonatal";
-    // Med cards are reorderable in any single-category view (including
-    // Favorites) but not in "All" or while searching — those views don't
-    // have a stable per-category list to mutate.
-    // Cross-tab drag (dropping a card onto a category tab to move it) IS
-    // wired separately below and works from every view.
-    const reorderable = state.category !== "All" && !state.search.trim() && state.category !== CODE_CATEGORY;
+    // Per-tile reorder disabled per user request — scrolling was misfiring
+    // long-press drags. Tiles no longer carry data-reorderable.
     const showCodeDose = state.category === CODE_CATEGORY;
     grid.innerHTML = items.map(m => {
       const isCustom = m.category === "Custom";
@@ -772,7 +768,7 @@
       }
       // <div role="button"> instead of <button> so the nested remove
       // <button> is valid HTML (buttons cannot be nested inside buttons).
-      return `<div class="${classes.join(" ")}" data-id="${m.id}" role="button" tabindex="0" aria-label="${escapeAttr(ariaLabel)}"${reorderable ? ' data-reorderable="1"' : ' data-cross-drag="1"'}>
+      return `<div class="${classes.join(" ")}" data-id="${m.id}" role="button" tabindex="0" aria-label="${escapeAttr(ariaLabel)}">
         <div class="name">${escapeHtml(m.name)}</div>
         ${codeBlock}
         ${removeBtn}
@@ -798,23 +794,10 @@
         }
       });
     });
-    if (reorderable) {
-      enableReorder(grid, ".med-card[data-reorderable]", (newOrder /* array of med ids */) => {
-        if (state.category === FAVORITES_CATEGORY) {
-          // Reordering the Favorites view rewrites the favorites array itself.
-          favorites = newOrder.slice();
-          saveFavorites();
-        } else {
-          order.meds[state.category] = newOrder;
-          saveOrder();
-        }
-      }, { crossTab: true });
-    } else {
-      // Even when in-grid reorder is disabled (All view, search results),
-      // we still want the user to be able to drag a card onto a category
-      // tab to move it. Wire a cross-tab-only drag here.
-      enableReorder(grid, ".med-card", null, { crossTab: true, inGridReorder: false });
-    }
+    // Per-tile drag/reorder intentionally disabled — user reported accidental
+    // long-press reorders while scrolling. Both in-grid reorder AND cross-tab
+    // drag of individual med tiles are disabled. Category tabs remain
+    // reorderable (separate enableReorder call on .cats).
     // Wire each card's remove button. Uses an inline two-step confirmation
     // (first tap arms the button, second tap removes) instead of window.confirm,
     // because native dialogs can be unreliable on iPad / WKWebView.
@@ -964,11 +947,6 @@
     if (!baseMed) return;
     state.currentMedId = id;
     const med = resolvePopulation(baseMed, state.population);
-    const types = effectiveTypes(med);
-    // For "both" meds, default to infusion if it has one (more common entry point);
-    // for pure bolus or pure infusion, use the only available mode.
-    state.mode = types.includes("infusion") ? "infusion" : "bolus";
-    state.concIdx = 0;
 
     calcName.textContent = med.name;
     calcCat.textContent = med.category;
@@ -978,6 +956,26 @@
 
     // Sources block
     renderSources(med);
+
+    // ---- Custom calculators ----
+    // Some entries (e.g. pediatric maintenance fluid) don't fit the
+    // concentration×dose model. Detect via med.customCalc and render a
+    // bespoke result panel, hiding the standard controls.
+    if (med.customCalc) {
+      renderCustomCalc(med);
+      if (typeof calcModal.showModal === "function") calcModal.showModal();
+      else calcModal.setAttribute("open", "");
+      return;
+    }
+
+    const types = effectiveTypes(med);
+    // For "both" meds, default to infusion if it has one (more common entry point);
+    // for pure bolus or pure infusion, use the only available mode.
+    state.mode = types.includes("infusion") ? "infusion" : "bolus";
+    state.concIdx = 0;
+
+    // Restore standard calc controls (in case they were hidden by a custom calc).
+    showStandardCalcControls();
 
     // Mode toggle: hide if only one mode
     calcModeSeg.style.display = types.length > 1 ? "" : "none";
@@ -1000,6 +998,175 @@
     if (typeof calcModal.showModal === "function") calcModal.showModal();
     else calcModal.setAttribute("open", "");
 
+  }
+
+  // -------- Custom calculators (non-concentration×dose meds) --------
+  // Hide the standard concentration / mode / dose / range controls so the
+  // result panel can render a bespoke calculator UI.
+  function hideStandardCalcControls() {
+    const ids = ["calc-mode-seg", "calc-mode-desc", "calc-bolus-cta", "calc-edit", "calc-duplicate"];
+    ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = "none"; });
+    // Hide concentration .field and dose .field (dose .field also wraps the range row).
+    ["calc-conc", "calc-dose", "calc-range"].forEach(id => {
+      const el = document.getElementById(id);
+      const field = el && el.closest(".field");
+      if (field) field.style.display = "none";
+    });
+    const notes = document.getElementById("calc-notes");
+    if (notes) notes.style.display = "";
+  }
+  function showStandardCalcControls() {
+    const ids = ["calc-mode-seg", "calc-mode-desc", "calc-edit", "calc-duplicate"];
+    ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = ""; });
+    ["calc-conc", "calc-dose", "calc-range"].forEach(id => {
+      const el = document.getElementById(id);
+      const field = el && el.closest(".field");
+      if (field) field.style.display = "";
+    });
+  }
+
+  function renderCustomCalc(med) {
+    hideStandardCalcControls();
+    const result = document.getElementById("calc-result");
+    const notes = document.getElementById("calc-notes");
+    if (med.customCalc === "maintenance_421") {
+      paintMaintenance(med, result);
+      if (notes) notes.textContent = med.notes || "";
+    } else {
+      result.innerHTML = `<div class="calc-warning">Unknown custom calculator: ${escapeHtml(med.customCalc)}</div>`;
+    }
+  }
+
+  // Render the maintenance panel HTML and wire its inline weight input.
+  // Called both on open and on each weight change so the panel re-renders
+  // live without closing the modal.
+  function paintMaintenance(med, resultEl) {
+    const focusKg = state.weightKg;
+    resultEl.innerHTML = renderMaintenance421(focusKg);
+    const innerWeight = document.getElementById("maintenance-weight");
+    if (!innerWeight) return;
+    // Keep the cursor at the end after re-render.
+    if (document.activeElement && document.activeElement.id === "maintenance-weight") {
+      // already focused: nothing to do
+    }
+    innerWeight.addEventListener("input", () => {
+      const raw = innerWeight.value;
+      const v = parseFloat(raw);
+      const kg = (isNaN(v) || v <= 0) ? null : v;
+      state.weightKg = kg;
+      // Mirror to the patient-strip weight input.
+      const mainInput = document.getElementById("weight");
+      if (mainInput) {
+        if (kg === null) mainInput.value = "";
+        else mainInput.value = state.unit === "kg" ? String(v) : (kg * 2.20462).toFixed(1);
+      }
+      // Auto-population.
+      if (!state.populationManual) {
+        const suggestion = suggestedPopulationFromWeight(kg) || "adult";
+        if (suggestion !== state.population) applyPopulation(suggestion, false);
+        else syncPopulationVisual();
+      }
+      saveState();
+      updateWeightDerived();
+      renderGrid();
+      // Re-render maintenance panel; preserve focus + caret.
+      const caret = innerWeight.selectionStart;
+      paintMaintenance(med, resultEl);
+      const refocus = document.getElementById("maintenance-weight");
+      if (refocus) {
+        refocus.focus();
+        try { refocus.setSelectionRange(caret, caret); } catch (_) {}
+      }
+    });
+  }
+
+  // Holliday-Segar 4-2-1 maintenance fluid rate.
+  //   First 10 kg:  4 mL/kg/hr
+  //   Next 10 kg:   2 mL/kg/hr
+  //   Each kg >20:  1 mL/kg/hr
+  // Adult shortcut: weight + 40 mL/hr (≥ 20 kg). Daily total ≈ hourly × 24.
+  function calcMaintenance421(weightKg) {
+    if (!weightKg || weightKg <= 0) return null;
+    let first = Math.min(weightKg, 10) * 4;
+    let second = Math.max(0, Math.min(weightKg - 10, 10)) * 2;
+    let third = Math.max(0, weightKg - 20) * 1;
+    const mlPerHr = first + second + third;
+    return {
+      mlPerHr,
+      mlPerDay: mlPerHr * 24,
+      breakdown: {
+        first10: { kg: Math.min(weightKg, 10), rate: 4, mlPerHr: first },
+        next10:  { kg: Math.max(0, Math.min(weightKg - 10, 10)), rate: 2, mlPerHr: second },
+        rest:    { kg: Math.max(0, weightKg - 20), rate: 1, mlPerHr: third }
+      }
+    };
+  }
+
+  function renderMaintenance421(weightKg) {
+    const r = calcMaintenance421(weightKg);
+    // Always render a weight input inside the modal so the clinician can
+    // tweak it without closing the modal first (the <dialog> is modal and
+    // blocks the patient-strip input behind it).
+    const weightInput = `
+      <div class="maintenance-weight-row">
+        <label for="maintenance-weight" class="maintenance-weight-label">Patient weight</label>
+        <div class="maintenance-weight-input-wrap">
+          <input id="maintenance-weight" type="number" inputmode="decimal" step="0.1" min="0" placeholder="—" value="${weightKg ? fmt(weightKg, 2) : ""}" />
+          <span class="maintenance-weight-unit">kg</span>
+        </div>
+      </div>`;
+    if (!r) {
+      return `${weightInput}
+      <div class="maintenance-empty">
+        <div class="maintenance-empty-title">Enter patient weight</div>
+        <div class="maintenance-empty-sub">Maintenance rate is calculated from weight using the Holliday-Segar 4-2-1 rule.</div>
+      </div>`;
+    }
+    const b = r.breakdown;
+    const halfRate = r.mlPerHr / 2;
+    const rows = [];
+    if (b.first10.kg > 0) {
+      rows.push(`<tr><td>First ${fmt(b.first10.kg, 1)} kg</td><td>× 4 mL/kg/hr</td><td class="num">${fmt(b.first10.mlPerHr, 1)} mL/hr</td></tr>`);
+    }
+    if (b.next10.kg > 0) {
+      rows.push(`<tr><td>Next ${fmt(b.next10.kg, 1)} kg</td><td>× 2 mL/kg/hr</td><td class="num">${fmt(b.next10.mlPerHr, 1)} mL/hr</td></tr>`);
+    }
+    if (b.rest.kg > 0) {
+      rows.push(`<tr><td>Remaining ${fmt(b.rest.kg, 1)} kg</td><td>× 1 mL/kg/hr</td><td class="num">${fmt(b.rest.mlPerHr, 1)} mL/hr</td></tr>`);
+    }
+    return `${weightInput}
+      <div class="maintenance-result">
+        <div class="maintenance-headline">
+          <div class="maintenance-label">Maintenance rate</div>
+          <div class="maintenance-rate">${fmt(r.mlPerHr, 1)} <span class="unit">mL/hr</span></div>
+          <div class="maintenance-sub">≈ ${fmt(r.mlPerDay, 0)} mL / 24 hr</div>
+        </div>
+        <table class="maintenance-breakdown">
+          <thead><tr><th>Weight band</th><th>Rate</th><th class="num">Hourly</th></tr></thead>
+          <tbody>${rows.join("")}</tbody>
+          <tfoot><tr><th colspan="2">Total (4-2-1)</th><th class="num">${fmt(r.mlPerHr, 1)} mL/hr</th></tr></tfoot>
+        </table>
+        <div class="maintenance-cards">
+          <div class="maintenance-card">
+            <div class="maintenance-card-label">½-maintenance</div>
+            <div class="maintenance-card-val">${fmt(halfRate, 1)} mL/hr</div>
+            <div class="maintenance-card-sub">For TBI/SIADH risk, hypoNa</div>
+          </div>
+          <div class="maintenance-card">
+            <div class="maintenance-card-label">Bolus dose</div>
+            <div class="maintenance-card-val">${fmt(weightKg * 20, 0)} mL</div>
+            <div class="maintenance-card-sub">20 mL/kg isotonic (shock)</div>
+          </div>
+          <div class="maintenance-card">
+            <div class="maintenance-card-label">Deficit (if 10% dehydrated)</div>
+            <div class="maintenance-card-val">${fmt(weightKg * 100, 0)} mL</div>
+            <div class="maintenance-card-sub">Replace ½ over 8h, ½ over 16h</div>
+          </div>
+        </div>
+        <div class="maintenance-disclaimer">
+          Use D5½ NS + 20 mEq KCl/L (or per protocol). Halve rate in head injury, SIADH risk, post-op. Reassess q4–6 h with electrolytes & UOP.
+        </div>
+      </div>`;
   }
 
   function renderConcentrations(med) {
@@ -1174,6 +1341,11 @@
   function updateCalc() {
     const med = getResolvedMed(state.currentMedId);
     if (!med) return;
+    // Custom calculators re-render whenever weight/population changes.
+    if (med.customCalc) {
+      renderCustomCalc(med);
+      return;
+    }
     renderBolusCta(med);
     renderSources(med);
     const cfg = med[state.mode];
