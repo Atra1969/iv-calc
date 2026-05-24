@@ -1544,3 +1544,34 @@ button, .btn-install, .cats button, [data-pop] {
   line-height: 1.5;
   margin-top: 4px;
 }
+
+/* ---------- SETTINGS > APP UPDATE block ---------- */
+.settings-app-update {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--surface-2, rgba(255,255,255,0.04));
+  border: 1px solid var(--border, rgba(255,255,255,0.14));
+  border-radius: 10px;
+}
+.settings-app-update-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.settings-app-update-text { min-width: 0; }
+.settings-app-update-title {
+  font-size: 13px; font-weight: 700; color: var(--text, #fff);
+}
+.settings-app-update-sub {
+  font-size: 11px; color: var(--text-muted, #c8d6e8);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  word-break: break-all;
+}
+.settings-app-update-hint {
+  font-size: 11px; color: var(--text-dim, #94a3b8);
+  line-height: 1.4;
+}
+#force-refresh-btn { flex-shrink: 0; }
+#force-refresh-btn[disabled] { opacity: 0.6; cursor: progress; }

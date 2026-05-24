@@ -318,6 +318,19 @@
       <button class="btn-ghost" id="reset-btn">Reset to defaults</button>
     </div>
     <hr />
+    <!-- App update controls. Force-refresh wipes the service-worker cache so
+         the next launch pulls a fresh shell; library/favorites are preserved. -->
+    <div class="settings-app-update">
+      <div class="settings-app-update-row">
+        <div class="settings-app-update-text">
+          <div class="settings-app-update-title">App update</div>
+          <div class="settings-app-update-sub">Current build: <span id="app-build-ver">—</span></div>
+        </div>
+        <button class="btn-ghost" id="force-refresh-btn" type="button">Force refresh</button>
+      </div>
+      <div class="settings-app-update-hint">Clears the cached app shell and reloads. Your library, favorites, and weight are preserved.</div>
+    </div>
+    <hr />
     <p class="disclaimer">
       <strong>Clinical disclaimer.</strong> This calculator is a decision-support aid for trained clinicians.
       All defaults must be verified against your local protocols and pharmacy formulary before use.
@@ -350,9 +363,92 @@
   // ---------- Service worker ----------
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function() {
-      navigator.serviceWorker.register("sw.js").catch(function(err) {
-        console.warn("SW registration failed:", err);
-      });
+      navigator.serviceWorker.register("sw.js")
+        .then(function() { updateBuildVersionLabel(); })
+        .catch(function(err) {
+          console.warn("SW registration failed:", err);
+          var el = document.getElementById("app-build-ver");
+          if (el) el.textContent = "unavailable (no service worker)";
+        });
+    });
+  } else {
+    var el = document.getElementById("app-build-ver");
+    if (el) el.textContent = "unavailable (no service worker)";
+  }
+
+  // Ask the active SW which build it's serving and paint it into Settings.
+  function updateBuildVersionLabel() {
+    var label = document.getElementById("app-build-ver");
+    if (!label) return;
+    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+      // First visit: SW is installing but not yet controlling. Try again shortly.
+      label.textContent = "installing…";
+      setTimeout(updateBuildVersionLabel, 800);
+      return;
+    }
+    try {
+      var ch = new MessageChannel();
+      var done = false;
+      ch.port1.onmessage = function(ev) {
+        done = true;
+        if (ev.data && ev.data.type === "VERSION" && ev.data.version) {
+          label.textContent = ev.data.version;
+        } else {
+          label.textContent = "unknown";
+        }
+      };
+      navigator.serviceWorker.controller.postMessage({ type: "GET_VERSION" }, [ch.port2]);
+      setTimeout(function() { if (!done) label.textContent = "unknown"; }, 1500);
+    } catch (_) {
+      label.textContent = "unknown";
+    }
+  }
+
+  // ---------- Force refresh ----------
+  // Wipes the SW cache and unregisters the worker, then hard-reloads. Library
+  // and favorites are stored in localStorage and are NOT touched.
+  var forceBtn = document.getElementById("force-refresh-btn");
+  if (forceBtn) {
+    forceBtn.addEventListener("click", async function() {
+      if (!confirm("Force refresh now? This wipes the cached app shell and reloads. Your library and favorites are preserved.")) return;
+      var originalLabel = forceBtn.textContent;
+      forceBtn.disabled = true;
+      forceBtn.textContent = "Refreshing…";
+      try {
+        // 1) Ask the controlling SW to wipe its caches (fast path).
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+          await new Promise(function(resolve) {
+            try {
+              var ch = new MessageChannel();
+              var settled = false;
+              ch.port1.onmessage = function() { settled = true; resolve(); };
+              navigator.serviceWorker.controller.postMessage({ type: "WIPE_CACHES" }, [ch.port2]);
+              setTimeout(function() { if (!settled) resolve(); }, 2000);
+            } catch (_) { resolve(); }
+          });
+        }
+        // 2) Belt-and-suspenders: also wipe from this page's perspective.
+        if ("caches" in window) {
+          try {
+            var keys = await caches.keys();
+            await Promise.all(keys.map(function(k) { return caches.delete(k); }));
+          } catch (_) {}
+        }
+        // 3) Unregister every SW for this origin so the next reload installs fresh.
+        if (navigator.serviceWorker) {
+          try {
+            var regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map(function(r) { return r.unregister(); }));
+          } catch (_) {}
+        }
+        // 4) Clear any session-scoped data but PRESERVE localStorage (library/favorites/state).
+        try { sessionStorage.clear(); } catch (_) {}
+      } finally {
+        // Cache-busted reload so the new shell + assets are fetched fresh.
+        var url = new URL(window.location.href);
+        url.searchParams.set("_r", String(Date.now()));
+        window.location.replace(url.toString());
+      }
     });
   }
 

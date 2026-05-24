@@ -2,7 +2,7 @@
 // Strategy: cache-first for the app shell so it works fully offline (essential for flight/EMS use).
 // Bump CACHE_VERSION on any deploy to force clients to fetch the new shell.
 
-const CACHE_VERSION = "iv-calc-v6-2026-05-24d";
+const CACHE_VERSION = "iv-calc-v6-2026-05-24e";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -72,5 +72,31 @@ self.addEventListener("fetch", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data === "SKIP_WAITING") self.skipWaiting();
+  const data = event.data;
+  if (data === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+  // Settings > App update > Current build display reads this.
+  if (data && data.type === "GET_VERSION") {
+    const port = event.ports && event.ports[0];
+    const payload = { type: "VERSION", version: CACHE_VERSION };
+    if (port) port.postMessage(payload);
+    else if (event.source && event.source.postMessage) event.source.postMessage(payload);
+    return;
+  }
+  // Force-refresh: wipe every cache this SW owns so the next fetch goes to network.
+  if (data && data.type === "WIPE_CACHES") {
+    event.waitUntil(
+      caches.keys()
+        .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+        .then(() => {
+          const port = event.ports && event.ports[0];
+          const reply = { type: "WIPE_CACHES_DONE" };
+          if (port) port.postMessage(reply);
+          else if (event.source && event.source.postMessage) event.source.postMessage(reply);
+        })
+    );
+    return;
+  }
 });
