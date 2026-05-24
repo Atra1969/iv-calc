@@ -142,10 +142,22 @@
       changed = true;
     }
     // Add bolusLabel: "Push Dose Pressor" to Epi + Phenyl if missing.
+    // Also strip bolusCtaLabel from those two — the CTA banner inside the
+    // infusion modal is redundant now that the Bolus mode tab itself reads
+    // "Push Dose Pressor" (Round 6b cleanup).
     ["epinephrine", "phenylephrine"].forEach(id => {
       const m = lib.find(x => x && x.id === id);
-      if (m && m.bolusLabel !== "Push Dose Pressor") {
+      if (!m) return;
+      if (m.bolusLabel !== "Push Dose Pressor") {
         m.bolusLabel = "Push Dose Pressor";
+        changed = true;
+      }
+      if (m.bolusCtaLabel) {
+        delete m.bolusCtaLabel;
+        changed = true;
+      }
+      if (m.hideBolusCta !== true) {
+        m.hideBolusCta = true;
         changed = true;
       }
     });
@@ -1748,7 +1760,10 @@
     const hint = $("#calc-bolus-hint");
     const labelEl = $("#calc-bolus-btn-label");
     const types = effectiveTypes(med);
-    const showCta = state.mode === "infusion" && types.includes("bolus") && med.bolus;
+    // Suppress the loading-bolus CTA banner when the med opts out via
+    // hideBolusCta (e.g. Epi/Phenyl, where the Bolus mode tab itself reads
+    // "Push Dose Pressor" and the CTA banner is redundant/confusing).
+    const showCta = state.mode === "infusion" && types.includes("bolus") && med.bolus && !med.hideBolusCta;
     if (!showCta) { cta.hidden = true; return; }
     cta.hidden = false;
     const b = med.bolus;

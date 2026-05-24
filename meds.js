@@ -55,7 +55,9 @@ const DEFAULT_MEDS = [
       min: 0.01, max: 1.0,
       notes: "Adult typical 0.01–1 mcg/kg/min (UMHS). CVICU max 0.2. Titrate to MAP ≥ 65."
     },
-    bolusCtaLabel: "Push-dose pressor",
+    // (Removed bolusCtaLabel "Push-dose pressor" in Round 6b — the Bolus mode
+    // tab already reads "Push Dose Pressor" so the CTA banner was redundant.)
+    hideBolusCta: true,
     code: {
       role: "Cardiac arrest (ACLS/PALS)",
       adult: { dose: 1, unit: "mg", perKg: false, route: "IV/IO", repeat: "q3–5 min" },
@@ -157,7 +159,8 @@ const DEFAULT_MEDS = [
       min: 50, max: 300,
       notes: "UMHS adult: 50–300 mcg/min (NOT per-kg in adults). Titrate to MAP ≥ 65."
     },
-    bolusCtaLabel: "Push-dose pressor",
+    // (Removed bolusCtaLabel in Round 6b — see Epi note above.)
+    hideBolusCta: true,
     notes: "MCHC (cardiac): peds bolus 5–20 mcg/kg q10–15 min PRN; infusion 0.05–5 mcg/kg/min (max 5). Adult ≥50kg 50–300 mcg/min. Central line preferred.",
     sources: [
       { label: "FDA Phenylephrine PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=phenylephrine+injection" },
