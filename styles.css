@@ -1457,3 +1457,90 @@ button, .btn-install, .cats button, [data-pop] {
 .maintenance-weight-unit {
   color: var(--accent, #FFCB05); font-weight: 700; font-size: 14px;
 }
+
+/* ---------- ALBUTEROL NEBULIZED custom calc ----------
+   Mirrors the maintenance modal patterns. Weight-banded display: a tab row
+   picks the band, two big result cards (intermittent + continuous) show the
+   dose, with amp/mL conversion below each. */
+.albuterol-bands {
+  display: flex; gap: 4px;
+  background: var(--surface-2, rgba(255,255,255,0.04));
+  padding: 4px; border-radius: 10px;
+  border: 1px solid var(--border, rgba(255,255,255,0.14));
+  margin: 8px 0 12px;
+}
+.albuterol-bands button {
+  flex: 1; height: 38px;
+  background: transparent; border: 0;
+  border-radius: 7px;
+  color: var(--text-muted, #c8d6e8); font-weight: 600;
+  font-size: 13px;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+.albuterol-bands button.active {
+  background: var(--accent, #FFCB05); color: var(--on-maize, #00274C);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.2);
+}
+.albuterol-panels { display: flex; flex-direction: column; gap: 12px; }
+.albuterol-panel { display: flex; flex-direction: column; gap: 12px; }
+.albuterol-panel[hidden] { display: none !important; }
+
+.albuterol-card {
+  padding: 14px 16px; border-radius: 12px;
+  border: 1px solid var(--border, rgba(255,255,255,0.14));
+}
+.albuterol-card--primary {
+  background: linear-gradient(135deg, rgba(255,203,5,0.10), rgba(255,203,5,0.04));
+  border-color: rgba(255,203,5,0.35);
+}
+.albuterol-card--alt {
+  background: var(--surface-2, rgba(255,255,255,0.04));
+}
+.albuterol-card-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted, #c8d6e8); font-weight: 700;
+}
+.albuterol-card-val {
+  font-size: 26px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text, #fff); margin-top: 4px;
+  line-height: 1.1;
+}
+.albuterol-card-val .unit {
+  font-size: 16px; font-weight: 600; color: var(--text-muted, #c8d6e8);
+  margin-left: 6px;
+}
+.albuterol-card-sub {
+  font-size: 12px; color: var(--text-muted, #c8d6e8);
+  margin-top: 6px; line-height: 1.35;
+}
+.albuterol-amp-note {
+  font-size: 11px;
+  color: var(--text-dim, #94a3b8);
+  margin-top: 4px;
+  padding: 4px 0 0;
+  border-top: 1px dashed rgba(255,255,255,0.08);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.albuterol-warning {
+  background: rgba(220, 38, 38, 0.12);
+  border: 1px solid rgba(220, 38, 38, 0.5);
+  color: #fecaca;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin: 8px 0 12px;
+  line-height: 1.45;
+}
+.albuterol-footer {
+  font-size: 12px;
+  color: var(--text-muted, #c8d6e8);
+  background: rgba(255,255,255,0.03);
+  border-left: 3px solid var(--accent, #FFCB05);
+  padding: 10px 12px;
+  border-radius: 6px;
+  line-height: 1.5;
+  margin-top: 4px;
+}

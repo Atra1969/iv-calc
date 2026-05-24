@@ -2,7 +2,7 @@
 // Strategy: cache-first for the app shell so it works fully offline (essential for flight/EMS use).
 // Bump CACHE_VERSION on any deploy to force clients to fetch the new shell.
 
-const CACHE_VERSION = "iv-calc-v6-2026-05-24c";
+const CACHE_VERSION = "iv-calc-v6-2026-05-24d";
 const APP_SHELL = [
   "./",
   "./index.html",

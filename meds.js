@@ -1757,6 +1757,33 @@ const DEFAULT_MEDS = [
     ]
   },
 
+  // ---------------- ALBUTEROL (nebulized) ----------------
+  // Nebulized albuterol doesn't fit the concentration×dose model so it uses a
+  // bespoke custom calc that surfaces weight-banded intermittent + continuous
+  // doses. Doses match UMHS/Johns Hopkins/OHSU asthma pathways. Note: the
+  // weight bands and continuous-neb caps are conservative — some institutions
+  // use 15–20 mg/hr for >20 kg peds. Adult max 30 mg/hr without MD consult.
+  {
+    id: "albuterol",
+    name: "Albuterol (nebulized)",
+    category: "Respiratory",
+    type: "bolus",
+    customCalc: "albuterol_neb",
+    populations: {
+      pediatric: { _showInPopulation: true },
+      neonatal:  { _showInPopulation: true },
+      adult:     { _showInPopulation: true }
+    },
+    notes: "Pediatric weight bands: 5–10 kg → 2.5 mg q20 min × 3 then q1–4 hr, OR 7.5 mg/hr continuous neb. 10–20 kg → 2.5 mg q20 min × 3 then q1–4 hr, OR 10 mg/hr continuous. >20 kg → 5 mg q20 min × 3 then q1–4 hr, OR 15 mg/hr continuous (peds MAX 20 mg/hr without MD consult). Adult: 5 mg q20 min × 3 then 5–10 mg q1–4 hr, OR 15 mg/hr continuous (MAX 30 mg/hr without MD consult). Standard amp = 2.5 mg / 3 mL (0.083%). Watch for tachycardia, tremor, hypokalemia, lactic acidosis with high-dose/prolonged continuous use.",
+    sources: [
+      { label: "GINA Global Strategy for Asthma Management 2024", url: "https://ginasthma.org/2024-report/" },
+      { label: "Johns Hopkins All Children’s Asthma Clinical Pathway", url: "https://www.hopkinsmedicine.org/-/media/files/allchildrens/clinical-pathways/jhach-asthma-clinical-pathway-5_16_23.pdf" },
+      { label: "OHSU Pediatric Asthma Clinical Pathway", url: "https://www.ohsu.edu/sites/default/files/2021-08/DCH%20ED%20Asthma-Clinical-Pathway_August%202021.pdf" },
+      { label: "UNC Continuous Albuterol Pathway for Asthma Patients (2024)", url: "https://www.med.unc.edu/pediatrics/cccp/wp-content/uploads/sites/1156/2024/02/Continuous-Albuterol-Pathway.pdf" },
+      { label: "NHLBI EPR-3 Guidelines for Diagnosis and Management of Asthma", url: "https://www.nhlbi.nih.gov/health-topics/guidelines-for-diagnosis-management-of-asthma" }
+    ]
+  },
+
   // ---------------- ELECTRICAL THERAPY (Code tab only) ----------------
   // These entries are surfaced ONLY in the Code tab. They have:
   //   - codeOnly: true       → hidden from "All", search, and category lists

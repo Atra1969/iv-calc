@@ -172,6 +172,12 @@
     ensureSecondary("hydroxocobalamin",    "Pressors");
     ensureSecondary("midazolam",           "Anticonvulsants");
     ensureSecondary("hypertonic_saline_3", "Anticonvulsants");
+    // 2026-05-24d: Seed albuterol (nebulized) custom calc into the library
+    // for returning users so it shows up in the Respiratory tab.
+    if (!lib.some(m => m && m.id === "albuterol")) {
+      const defAlb = hasDefault ? DEFAULT_MEDS.find(m => m && m.id === "albuterol") : null;
+      if (defAlb) { lib.push(JSON.parse(JSON.stringify(defAlb))); changed = true; }
+    }
     // Vasopressin: fold DI into variantOverlays + add variants array.
     const vp = lib.find(m => m && m.id === "vasopressin");
     const defVp = hasDefault ? DEFAULT_MEDS.find(m => m && m.id === "vasopressin") : null;
@@ -1351,6 +1357,9 @@
     } else if (med.customCalc === "defibrillation" || med.customCalc === "cardioversion") {
       paintElectricalTherapy(med, result);
       if (notes) notes.textContent = med.notes || "";
+    } else if (med.customCalc === "albuterol_neb") {
+      paintAlbuterolNeb(med, result);
+      if (notes) notes.textContent = med.notes || "";
     } else {
       result.innerHTML = `<div class="calc-warning">Unknown custom calculator: ${escapeHtml(med.customCalc)}</div>`;
     }
@@ -1733,6 +1742,145 @@
         <div class="maintenance-disclaimer">
           Isotonic fluid preferred (D5NS, D5LR, or per local protocol) — hypotonic maintenance fluids increase hyponatremia risk in hospitalized children (AAP 2018). For deficits and ongoing losses, calculate replacement separately and add to maintenance.
         </div>
+      </div>`;
+  }
+
+  // ---- Albuterol nebulized custom calc ----
+  // Weight-banded intermittent + continuous neb doses for asthma. Reads the
+  // global weight to auto-pick the band; user can override with the inline
+  // weight input or jump bands manually with the band buttons.
+  function calcAlbuterolNeb(weightKg, population) {
+    // Returns the dose band for a given weight. >88 kg adult uses adult column
+    // regardless of pediatric weight bands. Adult population always uses the
+    // adult band so the calculator works for adults entered without weight.
+    if (population === "adult") return { band: "adult" };
+    if (!weightKg || weightKg <= 0) return { band: null };
+    if (weightKg < 5)              return { band: "under5" };  // outside protocol
+    if (weightKg <= 10)            return { band: "5to10" };
+    if (weightKg <= 20)            return { band: "10to20" };
+    return { band: "over20" };
+  }
+
+  function paintAlbuterolNeb(med, resultEl) {
+    resultEl.innerHTML = renderAlbuterolNeb(state.weightKg, state.population);
+    // Inline weight input — mirrors the maintenance pattern.
+    const innerWeight = document.getElementById("albuterol-weight");
+    if (innerWeight) {
+      innerWeight.addEventListener("input", () => {
+        const v = parseFloat(innerWeight.value);
+        const kg = (isNaN(v) || v <= 0) ? null : v;
+        state.weightKg = kg;
+        const mainInput = document.getElementById("weight");
+        if (mainInput) {
+          if (kg === null) mainInput.value = "";
+          else mainInput.value = state.unit === "kg" ? String(v) : (kg * 2.20462).toFixed(1);
+        }
+        if (!state.populationManual) {
+          const suggestion = suggestedPopulationFromWeight(kg) || "adult";
+          if (suggestion !== state.population) applyPopulation(suggestion, false);
+          else syncPopulationVisual();
+        }
+        saveState();
+        updateWeightDerived();
+        renderGrid();
+        const caret = innerWeight.selectionStart;
+        paintAlbuterolNeb(med, resultEl);
+        const refocus = document.getElementById("albuterol-weight");
+        if (refocus) {
+          refocus.focus();
+          try { refocus.setSelectionRange(caret, caret); } catch (_) {}
+        }
+      });
+    }
+    // Population band override buttons — let the user inspect any band
+    // regardless of current weight (helpful for teaching / quick reference).
+    $$("#albuterol-bands button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        $$("#albuterol-bands button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        const wantBand = btn.dataset.band;
+        document.querySelectorAll("#albuterol-panels .albuterol-panel").forEach(p => {
+          p.hidden = p.dataset.band !== wantBand;
+        });
+      });
+    });
+  }
+
+  function renderAlbuterolNeb(weightKg, population) {
+    const r = calcAlbuterolNeb(weightKg, population);
+    const weightInput = `
+      <div class="maintenance-weight-row">
+        <label for="albuterol-weight" class="maintenance-weight-label">Patient weight</label>
+        <div class="maintenance-weight-input-wrap">
+          <input id="albuterol-weight" type="number" inputmode="decimal" step="0.1" min="0" placeholder="—" value="${weightKg ? fmt(weightKg, 2) : ""}" />
+          <span class="maintenance-weight-unit">kg</span>
+        </div>
+      </div>`;
+
+    // Five bands: under5 (warning), 5to10, 10to20, over20, adult.
+    const bands = [
+      { id: "5to10",  label: "5–10 kg" },
+      { id: "10to20", label: "10–20 kg" },
+      { id: "over20", label: ">20 kg" },
+      { id: "adult",  label: "Adult" }
+    ];
+    const activeBand = (r.band && r.band !== "under5") ? r.band : (population === "adult" ? "adult" : "5to10");
+    const bandRow = `
+      <div id="albuterol-bands" class="albuterol-bands" role="tablist" aria-label="Weight band">
+        ${bands.map(b => `<button type="button" data-band="${b.id}" class="${b.id === activeBand ? "active" : ""}" role="tab">${b.label}</button>`).join("")}
+      </div>`;
+
+    const under5Warn = (r.band === "under5")
+      ? `<div class="albuterol-warning">⚠ Patient &lt;5 kg — falls below published pediatric protocol bands. Consult PICU / pediatric pulmonology before initiating continuous albuterol.</div>`
+      : "";
+
+    // ---- Per-band panels ----
+    const panel = (band, html) =>
+      `<div class="albuterol-panel" data-band="${band}"${band === activeBand ? "" : " hidden"}>${html}</div>`;
+
+    const intermittent = (mg, qThen) => `
+      <div class="albuterol-card albuterol-card--primary">
+        <div class="albuterol-card-label">Intermittent neb</div>
+        <div class="albuterol-card-val">${mg} <span class="unit">mg</span></div>
+        <div class="albuterol-card-sub">q20 min × 3 doses, then ${qThen}</div>
+      </div>`;
+
+    const continuous = (mgHr, max) => `
+      <div class="albuterol-card albuterol-card--alt">
+        <div class="albuterol-card-label">Continuous neb</div>
+        <div class="albuterol-card-val">${mgHr} <span class="unit">mg/hr</span></div>
+        <div class="albuterol-card-sub">MAX ${max} mg/hr without MD consult</div>
+      </div>`;
+
+    const ampNote = (mg) => {
+      const amps = mg / 2.5;
+      const ml = amps * 3;
+      return `<div class="albuterol-amp-note">= ${fmt(amps, 1)} amp${amps === 1 ? "" : "s"} (${fmt(ml, 1)} mL of 0.083% solution; 2.5 mg / 3 mL per amp)</div>`;
+    };
+
+    const panels = [
+      panel("5to10",
+        intermittent("2.5", "2.5 mg q1–4 hr") + ampNote(2.5) +
+        continuous("7.5", "20")               + ampNote(7.5)
+      ),
+      panel("10to20",
+        intermittent("2.5", "2.5 mg q1–4 hr") + ampNote(2.5) +
+        continuous("10", "20")                + ampNote(10)
+      ),
+      panel("over20",
+        intermittent("5", "5 mg q1–4 hr")     + ampNote(5) +
+        continuous("15", "20")                + ampNote(15)
+      ),
+      panel("adult",
+        intermittent("5", "5–10 mg q1–4 hr")  + ampNote(5) +
+        continuous("15", "30")                + ampNote(15)
+      ),
+    ].join("");
+
+    return `${weightInput}${under5Warn}${bandRow}
+      <div id="albuterol-panels" class="albuterol-panels">${panels}</div>
+      <div class="albuterol-footer">
+        Standard amp: 2.5 mg / 3 mL (0.083%). Monitor HR, telemetry, K⁺, glucose, lactate with prolonged continuous use. Consider IV magnesium 25–75 mg/kg (peds, max 2 g) for severe exacerbation per institutional protocol.
       </div>`;
   }
 
