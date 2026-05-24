@@ -435,15 +435,49 @@
   </div>
 </div>
 
+<!-- ============== UPDATE-AVAILABLE TOAST ==============
+     Non-disruptive in-app prompt shown when the service worker detects a new
+     build is waiting to activate. Sits in the bottom safe-area so it stays
+     clear of the header and active form fields. The user must explicitly tap
+     "Update now" — we never auto-reload. The Update action is disabled while
+     offline so we can't reload into a network that doesn't have the new shell. -->
+<div id="update-toast"
+     class="update-toast"
+     role="region"
+     aria-label="Update available"
+     aria-live="polite"
+     hidden>
+  <div class="update-toast-card">
+    <div class="update-toast-text">
+      <div class="update-toast-title">Update available</div>
+      <div class="update-toast-sub" id="update-toast-sub">A newer build is ready. Updating preserves your library, favorites, and weight.</div>
+    </div>
+    <div class="update-toast-actions">
+      <button type="button" class="btn-ghost" id="update-toast-later" aria-label="Dismiss update prompt for now">Later</button>
+      <button type="button" class="btn-primary" id="update-toast-now" aria-label="Apply update now">Update now</button>
+    </div>
+  </div>
+</div>
+
 <script src="meds.js"></script>
 <script src="app.js"></script>
 <script>
 (function() {
   // ---------- Service worker ----------
+  // After registration we wire up update-available detection:
+  //   • registration.waiting       — a new SW is already waiting on this load
+  //   • updatefound + statechange  — a new SW just installed during this session
+  //   • periodic registration.update() — poll for new builds while the tab is open
+  //   • controllerchange           — the new SW just took control → safe reload
+  var swRegistration = null;
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function() {
       navigator.serviceWorker.register("sw.js")
-        .then(function() { updateBuildVersionLabel(); })
+        .then(function(reg) {
+          swRegistration = reg;
+          updateBuildVersionLabel();
+          wireUpdateAvailable(reg);
+        })
         .catch(function(err) {
           console.warn("SW registration failed:", err);
           var el = document.getElementById("app-build-ver");
@@ -481,6 +515,210 @@
     } catch (_) {
       label.textContent = "unknown";
     }
+  }
+
+  // ---------- Update-available prompt ----------
+  // Strategy: when the service worker has a waiting/installed-but-not-active
+  // worker, surface a non-disruptive toast with "Update now" / "Later".
+  // On Update now we post SKIP_WAITING and reload on controllerchange. We do
+  // NOT wipe caches, unregister the SW, or touch storage — that's Force
+  // refresh's job. We also refuse to update while offline so the page doesn't
+  // reload into a context that can't fetch the new shell.
+  var toastEl        = document.getElementById("update-toast");
+  var toastNowBtn    = document.getElementById("update-toast-now");
+  var toastLaterBtn  = document.getElementById("update-toast-later");
+  var toastSubEl     = document.getElementById("update-toast-sub");
+  var updateReloadInFlight = false;
+  var dismissedThisSession = false;
+  var pendingWaitingWorker = null;
+  var DEFAULT_SUB = "A newer build is ready. Updating preserves your library, favorites, and weight.";
+  var OFFLINE_SUB = "Update is paused while offline. Reconnect to install the new build. Your data is safe.";
+
+  function isOnline() {
+    return !(navigator && navigator.onLine === false);
+  }
+
+  // True when the user is actively in a med/calc/settings/confirm dialog —
+  // we still SHOW the toast (the spec says appear when safe and non-disruptive)
+  // but a *future* enhancement could suppress; for now we just never auto-reload.
+  function anyModalOpen() {
+    var dialogs = document.querySelectorAll("dialog.modal");
+    for (var i = 0; i < dialogs.length; i++) {
+      if (dialogs[i].open) return true;
+    }
+    return false;
+  }
+
+  function setToastOfflineState() {
+    if (!toastEl || toastEl.hidden) return;
+    var online = isOnline();
+    if (toastNowBtn) {
+      toastNowBtn.disabled = !online || updateReloadInFlight;
+      toastNowBtn.setAttribute("aria-disabled", String(!online || updateReloadInFlight));
+    }
+    if (toastSubEl) {
+      toastSubEl.textContent = online ? DEFAULT_SUB : OFFLINE_SUB;
+    }
+    toastEl.setAttribute("data-online", online ? "yes" : "no");
+  }
+
+  function showUpdateToast(waitingWorker) {
+    if (!toastEl) return;
+    if (dismissedThisSession) return;
+    pendingWaitingWorker = waitingWorker || pendingWaitingWorker || null;
+    toastEl.hidden = false;
+    setToastOfflineState();
+    // Move focus to the primary action for keyboard users, but only if no
+    // other modal is open (don't steal focus mid-entry).
+    if (toastNowBtn && !anyModalOpen()) {
+      try { toastNowBtn.focus({ preventScroll: true }); } catch (_) {
+        try { toastNowBtn.focus(); } catch (_) {}
+      }
+    }
+  }
+
+  function hideUpdateToast() {
+    if (!toastEl) return;
+    toastEl.hidden = true;
+  }
+
+  function wireUpdateAvailable(reg) {
+    if (!reg) return;
+
+    // Case A: a waiting worker already exists on this load.
+    if (reg.waiting && navigator.serviceWorker.controller) {
+      showUpdateToast(reg.waiting);
+    }
+
+    // Case B: a new SW is found during this session.
+    reg.addEventListener("updatefound", function() {
+      var installing = reg.installing;
+      if (!installing) return;
+      installing.addEventListener("statechange", function() {
+        if (installing.state === "installed" && navigator.serviceWorker.controller) {
+          // New worker installed while a current one controls the page → update available.
+          showUpdateToast(reg.waiting || installing);
+        }
+      });
+    });
+
+    // Case C: the new SW just took control — reload (only if we initiated it).
+    navigator.serviceWorker.addEventListener("controllerchange", function() {
+      if (!updateReloadInFlight) return;
+      // Cache-bust the URL so the network-first navigation pulls the new shell.
+      try {
+        var url = new URL(window.location.href);
+        url.searchParams.set("_u", String(Date.now()));
+        window.location.replace(url.toString());
+      } catch (_) {
+        window.location.reload();
+      }
+    });
+
+    // Poll for updates while the tab is open: every 30 minutes, plus when the
+    // tab returns to the foreground or the network comes back online. The
+    // browser also does its own periodic check, but this catches long-lived
+    // standalone PWA sessions on iOS where the page can stay open for days.
+    function safeUpdateCheck() {
+      if (!isOnline()) return;
+      try { reg.update(); } catch (_) {}
+    }
+    setInterval(safeUpdateCheck, 30 * 60 * 1000);
+    document.addEventListener("visibilitychange", function() {
+      if (document.visibilityState === "visible") safeUpdateCheck();
+    });
+    window.addEventListener("online", function() {
+      setToastOfflineState();
+      safeUpdateCheck();
+    });
+    window.addEventListener("offline", setToastOfflineState);
+
+    // One quick check after first paint to surface a waiting build promptly.
+    setTimeout(safeUpdateCheck, 2000);
+  }
+
+  if (toastLaterBtn) {
+    toastLaterBtn.addEventListener("click", function() {
+      // Dismiss for this session only — we re-surface on the next tab open or
+      // if another update is found during this session via updatefound.
+      dismissedThisSession = true;
+      hideUpdateToast();
+    });
+  }
+  if (toastNowBtn) {
+    toastNowBtn.addEventListener("click", async function() {
+      var appAlert = window.__ivAppAlert;
+      // Re-check online state at click time — network may have dropped between
+      // the toast appearing and the tap.
+      if (!isOnline()) {
+        setToastOfflineState();
+        if (appAlert) {
+          await appAlert({
+            title: "You're offline",
+            body: "Update is paused while offline. Reconnect to install the new build. Your data is safe.",
+          });
+        }
+        return;
+      }
+      if (updateReloadInFlight) return;
+      updateReloadInFlight = true;
+      toastNowBtn.disabled = true;
+      toastNowBtn.textContent = "Updating…";
+      try {
+        var waiting = (swRegistration && swRegistration.waiting) || pendingWaitingWorker;
+        if (waiting) {
+          // Safe path: a new SW is waiting → tell it to skipWaiting; the
+          // controllerchange handler will reload with a cache-buster.
+          try { waiting.postMessage({ type: "SKIP_WAITING" }); } catch (_) {}
+          try { waiting.postMessage("SKIP_WAITING"); } catch (_) {}
+          // Safety net: if controllerchange never fires (e.g. browser quirk),
+          // fall back to a plain cache-busted reload after a short timeout.
+          setTimeout(function() {
+            if (!updateReloadInFlight) return;
+            if (!isOnline()) {
+              // Lost connectivity during the wait — abort, keep caches/SW intact.
+              updateReloadInFlight = false;
+              toastNowBtn.disabled = false;
+              toastNowBtn.textContent = "Update now";
+              setToastOfflineState();
+              if (appAlert) {
+                appAlert({
+                  title: "Network dropped — update cancelled",
+                  body: "Your device went offline before the new build could load. The cached app shell has not been touched.",
+                });
+              }
+              return;
+            }
+            try {
+              var url = new URL(window.location.href);
+              url.searchParams.set("_u", String(Date.now()));
+              window.location.replace(url.toString());
+            } catch (_) {
+              window.location.reload();
+            }
+          }, 4000);
+        } else {
+          // No waiting worker but the user explicitly asked to update and we
+          // are online: do a plain cache-busted reload. We do NOT wipe caches
+          // or unregister — the SW will pick up new assets via its network-
+          // first navigation handler.
+          var url = new URL(window.location.href);
+          url.searchParams.set("_u", String(Date.now()));
+          window.location.replace(url.toString());
+        }
+      } catch (err) {
+        updateReloadInFlight = false;
+        toastNowBtn.disabled = false;
+        toastNowBtn.textContent = "Update now";
+        if (appAlert) {
+          appAlert({
+            title: "Update failed",
+            body: "Could not start the update. The cached app shell has not been touched. Try again or use Force refresh from Settings.",
+          });
+        }
+        console.warn("Update flow failed:", err);
+      }
+    });
   }
 
   // ---------- Force refresh ----------

@@ -1722,3 +1722,117 @@ button, .btn-install, .cats button, [data-pop] {
     justify-self: start;
   }
 }
+
+/* ============== UPDATE-AVAILABLE TOAST ==============
+   Bottom-of-screen, safe-area-aware toast surfaced when the service worker
+   reports a new build is ready. Mobile-first sizing with min 48px tap targets.
+   We use both an icon glyph and explicit text so the cue isn't color-only. */
+.update-toast {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9000;
+  padding:
+    10px
+    calc(12px + env(safe-area-inset-right))
+    calc(10px + env(safe-area-inset-bottom))
+    calc(12px + env(safe-area-inset-left));
+  pointer-events: none; /* outer container is just a positioning shim */
+  display: flex;
+  justify-content: center;
+}
+.update-toast[hidden] { display: none; }
+.update-toast-card {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 560px;
+  background: var(--surface-2, #0a3464);
+  color: var(--text, #fff);
+  border: 1px solid var(--border-strong, #3a6db0);
+  border-radius: var(--radius, 12px);
+  box-shadow: var(--shadow, 0 8px 24px rgba(0,0,0,0.45));
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+.update-toast-card::before {
+  /* Always-on glyph so users with reduced color vision get a non-color cue */
+  content: "⟳";
+  display: inline-block;
+  margin-right: 4px;
+  font-weight: 700;
+  color: var(--accent, #FFCB05);
+}
+.update-toast-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  grid-column: 1 / 2;
+}
+.update-toast-title {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+}
+.update-toast-sub {
+  font-size: 13px;
+  color: var(--text-muted, #c8d6e8);
+  line-height: 1.35;
+}
+.update-toast-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  grid-column: 2 / 3;
+}
+.update-toast-actions .btn-ghost,
+.update-toast-actions .btn-primary {
+  min-height: var(--tap, 48px);
+  padding: 0 16px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.update-toast-actions .btn-primary[disabled],
+.update-toast-actions .btn-primary[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+/* Offline state: subdue card slightly so it visibly reflects the disabled CTA */
+.update-toast[data-online="no"] .update-toast-card {
+  border-color: var(--warn, #FF9500);
+}
+
+/* Narrow phones: stack actions under text so buttons stay full-width and tap-friendly */
+@media (max-width: 480px) {
+  .update-toast-card {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .update-toast-text { grid-column: 1 / -1; }
+  .update-toast-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+  .update-toast-actions .btn-ghost,
+  .update-toast-actions .btn-primary {
+    flex: 1 1 auto;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .update-toast:not([hidden]) .update-toast-card {
+    animation: update-toast-in 180ms ease-out both;
+  }
+  @keyframes update-toast-in {
+    from { transform: translateY(8px); opacity: 0; }
+    to   { transform: translateY(0);   opacity: 1; }
+  }
+}

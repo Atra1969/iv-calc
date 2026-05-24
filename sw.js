@@ -2,7 +2,7 @@
 // Strategy: cache-first for the app shell so it works fully offline (essential for flight/EMS use).
 // Bump CACHE_VERSION on any deploy to force clients to fetch the new shell.
 
-const CACHE_VERSION = "iv-calc-v6-2026-05-24g";
+const CACHE_VERSION = "iv-calc-v6-2026-05-24h";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -18,13 +18,18 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
+  // Do NOT auto-skipWaiting. The page detects a waiting worker, shows an
+  // Update-available toast, and posts SKIP_WAITING only on user confirm.
+  // This preserves any in-flight clinical entry until the user explicitly
+  // taps "Update now". First-ever install has no controller, so the new SW
+  // activates on the next navigation anyway.
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) =>
       // addAll fails atomically; use individual adds to tolerate any missing optional file
       Promise.all(APP_SHELL.map((url) =>
         cache.add(new Request(url, { cache: "reload" })).catch(() => null)
       ))
-    ).then(() => self.skipWaiting())
+    )
   );
 });
 
@@ -73,7 +78,7 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("message", (event) => {
   const data = event.data;
-  if (data === "SKIP_WAITING") {
+  if (data === "SKIP_WAITING" || (data && data.type === "SKIP_WAITING")) {
     self.skipWaiting();
     return;
   }
