@@ -2650,13 +2650,17 @@
     const factorUnit = f.factorUnit || (med.bolus && med.bolus.doseUnit) || "mL";
     const raw = beInputState.value;
 
-    // Use type=text + inputmode=decimal so iOS/Safari and mobile keyboards
-    // (a) show a minus key on iPad/iPhone keypads and (b) preserve intermediate
-    // strings like '-', '-.', '-0.' that a type=number input would silently
-    // wipe via HTML5 sanitization. pattern keeps form-level validation honest
-    // while still letting JS handle parsing. The input is rendered ONCE per
-    // med-switch; subsequent keystrokes patch only the result block below it,
-    // so the field keeps focus and caret.
+    // Use type=text with NO inputmode so iOS/Safari shows a regular text
+    // keyboard that includes a minus key. inputmode="decimal" and "numeric"
+    // on iPhone surface a numeric keypad that lacks '-', and inputmode="tel"
+    // (or pattern hints containing '+') can trigger phone-number autofill
+    // heuristics. A plain text keyboard is the only reliable way to enter
+    // negative decimal values on iPhone. Parser/validation in JS still
+    // controls allowed values. The input is rendered ONCE per med-switch;
+    // subsequent keystrokes patch only the result block below it, so the
+    // field keeps focus and caret. name attr deliberately omitted to avoid
+    // iOS contact/phone autofill heuristics. format-detection telephone=no
+    // is set globally in index.html.
     const formulaLine = f.formula ? `<span class="be-formula-line">${escapeHtml(f.formula)}</span>` : "";
     const exampleLine = f.example ? `<span class="be-formula-example">e.g. ${escapeHtml(f.example)}</span>` : "";
     calcBePanel.innerHTML = `
@@ -2668,10 +2672,10 @@
       </div>
       <div class="be-input-row">
         <label for="calc-be-input">Base excess</label>
-        <input id="calc-be-input" type="text" inputmode="decimal"
+        <input id="calc-be-input" type="text"
                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-               pattern="^[+-]?(\\d+(\\.\\d*)?|\\.\\d+)$"
-               value="${escapeAttr(raw)}" placeholder="mEq/L (e.g. -12)"
+               enterkeyhint="done"
+               value="${escapeAttr(raw)}" placeholder="e.g. -5"
                aria-label="Base excess in milliequivalents per liter"
                aria-describedby="calc-be-help" />
         <span class="be-units">mEq/L</span>
