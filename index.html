@@ -331,6 +331,66 @@
       <div class="settings-app-update-hint">Clears the cached app shell and reloads. Your library, favorites, and weight are preserved.</div>
     </div>
     <hr />
+    <!-- Install / Offline Readiness panel.
+         Surfaces install state, service-worker status, cache availability, and
+         network status so the user can confirm the app is ready for use in the
+         field (transport / EMS) where connectivity may drop. All checks are
+         non-destructive: no cache wipes, no SW unregistration. -->
+    <div class="readiness-panel" id="readiness-panel" aria-labelledby="readiness-title">
+      <div class="readiness-head">
+        <div class="readiness-title" id="readiness-title">Install &amp; offline readiness</div>
+        <div class="readiness-sub">Confirms this device is ready to run the app on the home screen, including when offline.</div>
+      </div>
+      <ul class="readiness-list" role="list">
+        <li class="readiness-row" data-row="install">
+          <span class="readiness-icon" aria-hidden="true">•</span>
+          <div class="readiness-text">
+            <div class="readiness-label">Installed / standalone mode</div>
+            <div class="readiness-value" id="readiness-install-value">Checking…</div>
+            <div class="readiness-hint" id="readiness-install-hint" hidden></div>
+          </div>
+          <span class="readiness-status" id="readiness-install-status" aria-live="polite">…</span>
+        </li>
+        <li class="readiness-row" data-row="sw">
+          <span class="readiness-icon" aria-hidden="true">•</span>
+          <div class="readiness-text">
+            <div class="readiness-label">Service worker active</div>
+            <div class="readiness-value" id="readiness-sw-value">Checking…</div>
+          </div>
+          <span class="readiness-status" id="readiness-sw-status" aria-live="polite">…</span>
+        </li>
+        <li class="readiness-row" data-row="cache">
+          <span class="readiness-icon" aria-hidden="true">•</span>
+          <div class="readiness-text">
+            <div class="readiness-label">Offline cache ready</div>
+            <div class="readiness-value" id="readiness-cache-value">Checking…</div>
+          </div>
+          <span class="readiness-status" id="readiness-cache-status" aria-live="polite">…</span>
+        </li>
+        <li class="readiness-row" data-row="build">
+          <span class="readiness-icon" aria-hidden="true">•</span>
+          <div class="readiness-text">
+            <div class="readiness-label">Current build</div>
+            <div class="readiness-value" id="readiness-build-value">—</div>
+          </div>
+          <span class="readiness-status" id="readiness-build-status" aria-live="polite">…</span>
+        </li>
+        <li class="readiness-row" data-row="net">
+          <span class="readiness-icon" aria-hidden="true">•</span>
+          <div class="readiness-text">
+            <div class="readiness-label">Network status</div>
+            <div class="readiness-value" id="readiness-net-value">Checking…</div>
+          </div>
+          <span class="readiness-status" id="readiness-net-status" aria-live="polite">…</span>
+        </li>
+      </ul>
+      <div class="readiness-actions">
+        <button class="btn-ghost" id="readiness-check-btn" type="button">Check readiness</button>
+        <button class="btn-ghost" id="readiness-test-btn" type="button">Test offline readiness</button>
+      </div>
+      <div class="readiness-result" id="readiness-result" hidden role="status" aria-live="polite"></div>
+    </div>
+    <hr />
     <p class="disclaimer">
       <strong>Clinical disclaimer.</strong> This calculator is a decision-support aid for trained clinicians.
       All defaults must be verified against your local protocols and pharmacy formulary before use.
@@ -563,6 +623,261 @@
     installBtn.hidden = true;
     deferredPrompt = null;
   });
+
+  // ---------- Install / Offline Readiness panel ----------
+  // All checks are NON-DESTRUCTIVE. We never wipe caches or unregister the SW
+  // from this panel — the user can opt into that via Force refresh, which has
+  // its own offline guard.
+  var readinessPanel = document.getElementById("readiness-panel");
+  if (readinessPanel) {
+    var rEl = {
+      installValue: document.getElementById("readiness-install-value"),
+      installHint:  document.getElementById("readiness-install-hint"),
+      installStat:  document.getElementById("readiness-install-status"),
+      swValue:      document.getElementById("readiness-sw-value"),
+      swStat:       document.getElementById("readiness-sw-status"),
+      cacheValue:   document.getElementById("readiness-cache-value"),
+      cacheStat:    document.getElementById("readiness-cache-status"),
+      buildValue:   document.getElementById("readiness-build-value"),
+      buildStat:    document.getElementById("readiness-build-status"),
+      netValue:     document.getElementById("readiness-net-value"),
+      netStat:      document.getElementById("readiness-net-status"),
+      checkBtn:     document.getElementById("readiness-check-btn"),
+      testBtn:      document.getElementById("readiness-test-btn"),
+      result:       document.getElementById("readiness-result"),
+    };
+
+    // status: "ok" | "warn" | "bad" | "info" | "pending"
+    function setRow(rowKey, valueText, status, hintText) {
+      var row = readinessPanel.querySelector('[data-row="' + rowKey + '"]');
+      if (!row) return;
+      row.setAttribute("data-status", status || "info");
+      var labels = { ok: "Ready", warn: "Action needed", bad: "Not ready", info: "Info", pending: "Checking…" };
+      var icons  = { ok: "✓", warn: "!", bad: "✕", info: "i", pending: "…" };
+      var valueEl = row.querySelector(".readiness-value");
+      var iconEl  = row.querySelector(".readiness-icon");
+      var statEl  = row.querySelector(".readiness-status");
+      if (valueEl) valueEl.textContent = valueText;
+      if (iconEl) iconEl.textContent = icons[status] || "•";
+      if (statEl) statEl.textContent = labels[status] || "";
+      if (rowKey === "install") {
+        if (hintText) {
+          rEl.installHint.hidden = false;
+          rEl.installHint.textContent = hintText;
+        } else {
+          rEl.installHint.hidden = true;
+          rEl.installHint.textContent = "";
+        }
+      }
+    }
+
+    function detectPlatform() {
+      var ua2 = window.navigator.userAgent || "";
+      var iOS = /iPad|iPhone|iPod/.test(ua2) && !window.MSStream;
+      var iPadOS = /Macintosh/.test(ua2) && "ontouchend" in document;
+      var android = /Android/.test(ua2);
+      return { iOS: iOS || iPadOS, android: android };
+    }
+
+    function checkInstall() {
+      var standalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        window.navigator.standalone === true;
+      if (standalone) {
+        setRow("install", "Installed — running in standalone mode.", "ok", "");
+        return;
+      }
+      var plat = detectPlatform();
+      var hint;
+      if (plat.iOS) {
+        hint = "iOS: tap the Share button in Safari, then Add to Home Screen.";
+      } else if (plat.android) {
+        hint = "Android Chrome: open the browser menu, then Install app or Add to Home Screen.";
+      } else if (deferredPrompt) {
+        hint = "Desktop Chrome/Edge: click the install icon in the address bar, or use the Install button on the home screen.";
+      } else {
+        hint = "Desktop Chrome/Edge: look for the install icon in the address bar. Other browsers may not support installation.";
+      }
+      setRow("install", "Not installed — running in browser.", "warn", hint);
+    }
+
+    function checkServiceWorker() {
+      if (!("serviceWorker" in navigator)) {
+        setRow("sw", "Service workers are not supported in this browser.", "bad");
+        return Promise.resolve(false);
+      }
+      if (navigator.serviceWorker.controller) {
+        setRow("sw", "Service worker is active and controlling this page.", "ok");
+        return Promise.resolve(true);
+      }
+      // No controller yet — could be first visit / installing, or unregistered.
+      return navigator.serviceWorker.getRegistrations().then(function(regs) {
+        if (regs && regs.length) {
+          var installing = regs.some(function(r) { return r.installing || r.waiting; });
+          if (installing) {
+            setRow("sw", "Service worker is installing. Reload after a moment.", "pending");
+          } else {
+            setRow("sw", "Service worker registered but not yet controlling this page. Reload to activate.", "warn");
+          }
+        } else {
+          setRow("sw", "Service worker is not registered yet. Reload the page.", "pending");
+        }
+        return false;
+      }).catch(function() {
+        setRow("sw", "Could not query service worker registrations.", "warn");
+        return false;
+      });
+    }
+
+    function askServiceWorkerVersion() {
+      return new Promise(function(resolve) {
+        if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+          resolve(null);
+          return;
+        }
+        try {
+          var ch = new MessageChannel();
+          var done = false;
+          ch.port1.onmessage = function(ev) {
+            done = true;
+            if (ev.data && ev.data.type === "VERSION" && ev.data.version) resolve(ev.data.version);
+            else resolve(null);
+          };
+          navigator.serviceWorker.controller.postMessage({ type: "GET_VERSION" }, [ch.port2]);
+          setTimeout(function() { if (!done) resolve(null); }, 1500);
+        } catch (_) { resolve(null); }
+      });
+    }
+
+    function checkOfflineCache(swVersion) {
+      if (!("caches" in window)) {
+        setRow("cache", "Cache Storage is not available in this browser.", "bad");
+        return Promise.resolve(false);
+      }
+      return caches.keys().then(function(keys) {
+        if (!keys || !keys.length) {
+          setRow("cache", "No caches found yet. The service worker will populate the cache after the next load.", "pending");
+          return false;
+        }
+        // Prefer the version reported by the SW; otherwise pick the newest-looking iv-calc key.
+        var targetKey = swVersion && keys.indexOf(swVersion) !== -1
+          ? swVersion
+          : keys.filter(function(k) { return /iv-calc/i.test(k); }).sort().pop() || keys[0];
+        return caches.open(targetKey).then(function(cache) {
+          return cache.keys().then(function(reqs) {
+            var count = reqs ? reqs.length : 0;
+            // Heuristic: app shell has ~10 entries. Treat <3 as not yet warm.
+            if (count >= 6) {
+              setRow("cache", "Offline cache is warm (" + count + " shell entries in " + targetKey + ").", "ok");
+              return true;
+            }
+            if (count > 0) {
+              setRow("cache", "Cache is populating (" + count + " entries in " + targetKey + "). Reload once online to finish.", "warn");
+              return false;
+            }
+            setRow("cache", "Cache is empty. Reload once online so the app shell can be saved.", "warn");
+            return false;
+          });
+        }).catch(function() {
+          setRow("cache", "Could not inspect cache contents.", "warn");
+          return false;
+        });
+      }).catch(function() {
+        setRow("cache", "Could not list caches.", "warn");
+        return false;
+      });
+    }
+
+    function checkBuild(swVersion) {
+      if (swVersion) {
+        setRow("build", swVersion, "ok");
+        return;
+      }
+      if (navigator.serviceWorker && !navigator.serviceWorker.controller) {
+        setRow("build", "Build will be reported once the service worker is active.", "pending");
+        return;
+      }
+      setRow("build", "Build version not available.", "warn");
+    }
+
+    function checkNetwork() {
+      var online = !(navigator && navigator.onLine === false);
+      if (online) {
+        setRow("net", "Online — updates can be fetched.", "ok");
+      } else {
+        setRow("net", "Offline — the app will run from the cached shell.", "info");
+      }
+    }
+
+    function refreshReadiness() {
+      checkInstall();
+      checkNetwork();
+      // Service worker → version → cache, in sequence so we can pass version through.
+      Promise.resolve()
+        .then(checkServiceWorker)
+        .then(function() { return askServiceWorkerVersion(); })
+        .then(function(ver) {
+          checkBuild(ver);
+          return checkOfflineCache(ver);
+        });
+    }
+
+    rEl.checkBtn.addEventListener("click", function() {
+      rEl.result.hidden = true;
+      rEl.result.textContent = "";
+      refreshReadiness();
+    });
+
+    rEl.testBtn.addEventListener("click", function() {
+      // Non-destructive offline readiness test: re-run all checks, then summarize.
+      rEl.result.hidden = true;
+      rEl.result.textContent = "";
+      var sw = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+      askServiceWorkerVersion().then(function(ver) {
+        return checkOfflineCache(ver).then(function(cacheOk) {
+          var standalone =
+            window.matchMedia("(display-mode: standalone)").matches ||
+            window.navigator.standalone === true;
+          var msgs = [];
+          if (sw && cacheOk) {
+            msgs.push("Offline-ready: service worker is active and the app shell is cached.");
+          } else if (sw && !cacheOk) {
+            msgs.push("Service worker is active but the cache is not fully populated yet. Reload once online.");
+          } else {
+            msgs.push("Service worker is not controlling this page yet — reload to activate.");
+          }
+          if (!standalone) {
+            msgs.push("For best reliability, install to your home screen / desktop.");
+          }
+          rEl.result.textContent = msgs.join(" ");
+          rEl.result.hidden = false;
+          // Refresh visible rows so the panel matches the summary.
+          refreshReadiness();
+        });
+      });
+    });
+
+    // Re-run when the network state flips.
+    window.addEventListener("online", checkNetwork);
+    window.addEventListener("offline", checkNetwork);
+
+    // Re-run when the settings modal opens.
+    var settingsBtn = document.getElementById("btn-settings");
+    if (settingsBtn) {
+      settingsBtn.addEventListener("click", function() {
+        rEl.result.hidden = true;
+        rEl.result.textContent = "";
+        refreshReadiness();
+      });
+    }
+
+    // Initial run after a short delay (give SW a chance to register on first load).
+    setTimeout(refreshReadiness, 400);
+    // And again after SW becomes controller (handles first-visit transition).
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.addEventListener("controllerchange", refreshReadiness);
+    }
+  }
 })();
 </script>
 </body>
