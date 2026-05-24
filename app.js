@@ -196,8 +196,84 @@
     }
     return lib;
   }
+  // Returns true on success, false (and shows an error dialog) on failure.
   function saveLibrary() {
-    storage.setItem(STORAGE_KEY, JSON.stringify(library));
+    try {
+      storage.setItem(STORAGE_KEY, JSON.stringify(library));
+      return true;
+    } catch (e) {
+      // Surface storage failures (quota, private-mode iOS, etc) so the user
+      // knows their change didn't actually persist.
+      try {
+        appAlert({
+          title: "Could not save library",
+          body: "Your change was applied in this session but couldn't be written to device storage (" + (e && e.name ? e.name : "error") + "). Free up space and try again, or export your library now.",
+        });
+      } catch (_) {}
+      return false;
+    }
+  }
+  // Schema validator for imported libraries. Requires an array of medication-
+  // like objects with id, name, category, and a usable concentrations array
+  // (either top-level or per-mode). Returns { ok: true } or { ok: false, error }.
+  function validateImportedLibrary(arr) {
+    if (!Array.isArray(arr)) return { ok: false, error: "File must contain a JSON array." };
+    if (!arr.length) return { ok: false, error: "Library is empty." };
+    const allowedTypes = new Set(["bolus", "infusion", "both"]);
+    for (let i = 0; i < arr.length; i++) {
+      const m = arr[i];
+      const where = "Entry #" + (i + 1) + (m && m.name ? ' ("' + m.name + '")' : "");
+      if (!m || typeof m !== "object") return { ok: false, error: where + " is not an object." };
+      if (typeof m.id !== "string" || !m.id) return { ok: false, error: where + " is missing a string id." };
+      if (typeof m.name !== "string" || !m.name) return { ok: false, error: where + " is missing a name." };
+      if (typeof m.category !== "string" || !m.category) return { ok: false, error: where + " is missing a category." };
+      if (m.type !== undefined && !allowedTypes.has(m.type)) {
+        return { ok: false, error: where + ' has invalid type "' + m.type + '" (expected bolus/infusion/both).' };
+      }
+      // Concentrations may live at top level or per-mode. Accept any of them.
+      const concSources = [m.concentrations, m.bolusConcentrations, m.infusionConcentrations];
+      const hasConc = concSources.some(c => Array.isArray(c) && c.length > 0);
+      if (!hasConc) return { ok: false, error: where + " has no concentrations array." };
+    }
+    return { ok: true };
+  }
+  // Write a timestamped backup of the current library and prune older backups
+  // so we don't accumulate forever in localStorage. Returns true on success.
+  const LIBRARY_BACKUP_PREFIX = "iv-calc.library.backup.";
+  const LIBRARY_BACKUP_MAX = 5;
+  function backupLibrary() {
+    try {
+      const key = LIBRARY_BACKUP_PREFIX + new Date().toISOString();
+      storage.setItem(key, JSON.stringify(library));
+      // Best-effort prune. localStorage iteration via Object.keys is fine for
+      // real localStorage and falls through silently for the in-memory shim.
+      try {
+        const allKeys = [];
+        try {
+          const ls = window.localStorage;
+          if (ls && storage === ls) {
+            for (let i = 0; i < ls.length; i++) {
+              const k = ls.key(i);
+              if (k && k.indexOf(LIBRARY_BACKUP_PREFIX) === 0) allKeys.push(k);
+            }
+          }
+        } catch (_) {}
+        allKeys.sort();
+        while (allKeys.length > LIBRARY_BACKUP_MAX) {
+          const old = allKeys.shift();
+          try { storage.removeItem(old); } catch (_) {}
+        }
+      } catch (_) {}
+      return true;
+    } catch (e) {
+      try {
+        appAlert({
+          title: "Could not back up library",
+          body: "Device storage rejected the pre-import backup (" + (e && e.name ? e.name : "error") + "). The import has been cancelled to avoid data loss.",
+        });
+      } catch (_) {}
+      return false;
+    }
   }
   function loadState() {
     try { return JSON.parse(storage.getItem(STATE_KEY)) || {}; } catch (e) { return {}; }
@@ -206,6 +282,93 @@
     const { weightKg, unit, category, population, populationManual, filter, sort } = state;
     storage.setItem(STATE_KEY, JSON.stringify({ weightKg, unit, category, population, populationManual, filter, sort }));
   }
+
+  // ----------- APP-OWNED CONFIRM/ALERT DIALOG -----------
+  // Native confirm()/alert() are unreliable in iOS standalone PWA / WKWebView
+  // (some destructive prompts never appear). This helper drives the markup in
+  // #app-confirm-modal so destructive actions always get a visible prompt.
+  // appConfirm({ title, body, okLabel, cancelLabel, danger }) -> Promise<boolean>
+  // appAlert({ title, body, okLabel })                         -> Promise<void>
+  function appConfirm(opts) {
+    opts = opts || {};
+    return new Promise((resolve) => {
+      const modal = document.getElementById("app-confirm-modal");
+      const titleEl = document.getElementById("app-confirm-title");
+      const bodyEl = document.getElementById("app-confirm-body");
+      const okBtn = document.getElementById("app-confirm-ok");
+      const cancelBtn = document.getElementById("app-confirm-cancel");
+      if (!modal || !okBtn || !cancelBtn) {
+        // Last-resort fallback if markup is missing.
+        resolve(window.confirm((opts.title ? opts.title + "\n\n" : "") + (opts.body || "")));
+        return;
+      }
+      titleEl.textContent = opts.title || "Confirm";
+      bodyEl.textContent = opts.body || "";
+      okBtn.textContent = opts.okLabel || "OK";
+      cancelBtn.textContent = opts.cancelLabel || "Cancel";
+      okBtn.classList.toggle("btn-danger", !!opts.danger);
+      okBtn.classList.toggle("btn-primary", !opts.danger);
+      cancelBtn.hidden = false;
+
+      function cleanup(result) {
+        okBtn.removeEventListener("click", onOk);
+        cancelBtn.removeEventListener("click", onCancel);
+        modal.removeEventListener("cancel", onCancel);
+        modal.removeEventListener("click", onBackdrop);
+        try { if (modal.open) modal.close(); } catch (_) {}
+        resolve(result);
+      }
+      function onOk(e) { e.preventDefault(); cleanup(true); }
+      function onCancel(e) { if (e && e.preventDefault) e.preventDefault(); cleanup(false); }
+      function onBackdrop(e) { if (e.target === modal) cleanup(false); }
+      okBtn.addEventListener("click", onOk);
+      cancelBtn.addEventListener("click", onCancel);
+      modal.addEventListener("cancel", onCancel);
+      modal.addEventListener("click", onBackdrop);
+      if (typeof modal.showModal === "function") modal.showModal();
+      else modal.setAttribute("open", "");
+    });
+  }
+  function appAlert(opts) {
+    opts = opts || {};
+    return new Promise((resolve) => {
+      const modal = document.getElementById("app-confirm-modal");
+      const titleEl = document.getElementById("app-confirm-title");
+      const bodyEl = document.getElementById("app-confirm-body");
+      const okBtn = document.getElementById("app-confirm-ok");
+      const cancelBtn = document.getElementById("app-confirm-cancel");
+      if (!modal || !okBtn || !cancelBtn) {
+        try { window.alert((opts.title ? opts.title + "\n\n" : "") + (opts.body || "")); } catch (_) {}
+        resolve();
+        return;
+      }
+      titleEl.textContent = opts.title || "Notice";
+      bodyEl.textContent = opts.body || "";
+      okBtn.textContent = opts.okLabel || "OK";
+      okBtn.classList.remove("btn-danger");
+      okBtn.classList.add("btn-primary");
+      cancelBtn.hidden = true;
+
+      function cleanup() {
+        okBtn.removeEventListener("click", onOk);
+        modal.removeEventListener("cancel", onOk);
+        modal.removeEventListener("click", onBackdrop);
+        cancelBtn.hidden = false;
+        try { if (modal.open) modal.close(); } catch (_) {}
+        resolve();
+      }
+      function onOk(e) { if (e && e.preventDefault) e.preventDefault(); cleanup(); }
+      function onBackdrop(e) { if (e.target === modal) cleanup(); }
+      okBtn.addEventListener("click", onOk);
+      modal.addEventListener("cancel", onOk);
+      modal.addEventListener("click", onBackdrop);
+      if (typeof modal.showModal === "function") modal.showModal();
+      else modal.setAttribute("open", "");
+    });
+  }
+  // Expose to the page's inline script (Force Refresh handler in index.html).
+  window.__ivAppConfirm = appConfirm;
+  window.__ivAppAlert = appAlert;
 
   // ----------- POPULATION HELPERS -----------
   // Returns true if the underlying med (pre-resolve) has an overlay for the
@@ -2663,6 +2826,10 @@
     $$("button", seg).forEach(b => b.classList.toggle("active", b === btn));
   });
 
+  // Reset editingId on close — save/delete handlers already null it before
+  // calling close(); this catches cancel/backdrop/Esc so a stale editingId
+  // never leaks into the next openEdit() invocation.
+  editModal.addEventListener("close", () => { editingId = null; });
   $("#edit-cancel").addEventListener("click", () => editModal.close());
   $("#edit-close").addEventListener("click", () => editModal.close());
   editModal.addEventListener("click", e => { if (e.target === editModal) editModal.close(); });
@@ -2778,14 +2945,24 @@
     renderGrid();
   });
 
-  $("#edit-delete").addEventListener("click", () => {
+  $("#edit-delete").addEventListener("click", async () => {
     if (!editingId) return;
-    if (!confirm("Delete this medication from your library?")) return;
-    library = library.filter(m => m.id !== editingId);
-    saveLibrary();
+    // Capture the id BEFORE we touch editingId — the previous version compared
+    // state.currentMedId against editingId after nulling it, so the calc modal
+    // for the just-deleted med never closed.
+    const idToDelete = editingId;
+    const ok = await appConfirm({
+      title: "Delete medication?",
+      body: "This removes the medication from your library. You can restore it later by resetting to defaults.",
+      okLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    library = library.filter(m => m.id !== idToDelete);
+    if (!saveLibrary()) return; // saveLibrary surfaces its own error dialog
     editingId = null;
     editModal.close();
-    if (state.currentMedId === editingId) closeCalc();
+    if (state.currentMedId === idToDelete) closeCalc();
     renderCats();
     renderGrid();
   });
@@ -2822,23 +2999,47 @@
     if (!file) return;
     try {
       const txt = await file.text();
-      const parsed = JSON.parse(txt);
-      if (!Array.isArray(parsed)) throw new Error("File must contain a JSON array of medications.");
-      if (!confirm(`Import ${parsed.length} medications? This will REPLACE your current library.`)) return;
+      let parsed;
+      try { parsed = JSON.parse(txt); }
+      catch (jsonErr) { throw new Error("Not valid JSON: " + jsonErr.message); }
+      const check = validateImportedLibrary(parsed);
+      if (!check.ok) throw new Error(check.error);
+      const ok = await appConfirm({
+        title: "Replace library?",
+        body: "Import " + parsed.length + " medications? Your current library will be backed up automatically, but favorites/order/state will be preserved.",
+        okLabel: "Replace",
+        danger: true,
+      });
+      if (!ok) return;
+      // Auto-backup of the CURRENT library before we overwrite. If the backup
+      // write fails, backupLibrary surfaces its own dialog and we bail out so
+      // the user doesn't lose their data to a half-completed import.
+      if (!backupLibrary()) return;
       library = parsed;
-      saveLibrary();
+      if (!saveLibrary()) return;
       renderCats(); renderGrid();
       settingsModal.close();
     } catch (err) {
-      alert("Import failed: " + err.message);
+      await appAlert({
+        title: "Import failed",
+        body: err && err.message ? err.message : String(err),
+      });
     } finally {
       e.target.value = "";
     }
   });
-  $("#reset-btn").addEventListener("click", () => {
-    if (!confirm("Reset library to defaults? This deletes any customizations.")) return;
+  $("#reset-btn").addEventListener("click", async () => {
+    const ok = await appConfirm({
+      title: "Reset library to defaults?",
+      body: "This deletes any customizations you've made. Favorites and category order are preserved.",
+      okLabel: "Reset",
+      danger: true,
+    });
+    if (!ok) return;
+    // Back up the current library before wiping it, same as import.
+    if (!backupLibrary()) return;
     library = JSON.parse(JSON.stringify(DEFAULT_MEDS));
-    saveLibrary();
+    if (!saveLibrary()) return;
     renderCats(); renderGrid();
     settingsModal.close();
   });

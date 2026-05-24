@@ -794,6 +794,10 @@ input[type="range"] {
 }
 .modal-foot.space-between { justify-content: space-between; }
 .row-gap { display: flex; gap: 10px; }
+/* App-owned confirm/alert dialog — narrower than the calc/edit cards so it
+   reads as a prompt, not a panel. */
+.app-confirm-card { width: min(420px, 100%); }
+.app-confirm-card .subtitle { white-space: pre-wrap; line-height: 1.4; }
 /* Inline error bar inside the edit modal. We use this instead of alert()
    because window.alert can be dismissed silently on iPad / WKWebView —
    leaving the user thinking the Save button is broken. */

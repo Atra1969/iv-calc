@@ -339,6 +339,25 @@
   </div>
 </dialog>
 
+<!-- ============== APP CONFIRM/ALERT DIALOG ==============
+     App-owned replacement for window.confirm/alert. Works in iOS standalone
+     PWA / WKWebView where native dialogs are restricted. Title/body/buttons
+     are filled in dynamically by appConfirm()/appAlert() in app.js. -->
+<dialog id="app-confirm-modal" class="modal" aria-labelledby="app-confirm-title">
+  <div class="modal-card app-confirm-card">
+    <header class="modal-head">
+      <h2 id="app-confirm-title">Confirm</h2>
+    </header>
+    <p id="app-confirm-body" class="subtitle"></p>
+    <footer class="modal-foot">
+      <div class="row-gap" style="margin-left:auto">
+        <button type="button" class="btn-ghost" id="app-confirm-cancel">Cancel</button>
+        <button type="button" class="btn-primary" id="app-confirm-ok">OK</button>
+      </div>
+    </footer>
+  </div>
+</dialog>
+
 <!-- iOS install instructions sheet -->
 <div id="ios-install" class="ios-install" hidden role="dialog" aria-modal="true" aria-labelledby="ios-install-title">
   <div class="ios-install-card">
@@ -410,7 +429,48 @@
   var forceBtn = document.getElementById("force-refresh-btn");
   if (forceBtn) {
     forceBtn.addEventListener("click", async function() {
-      if (!confirm("Force refresh now? This wipes the cached app shell and reloads. Your library and favorites are preserved.")) return;
+      // Use the app-owned dialog when present (works in iOS standalone PWA);
+      // fall back to native confirm only if app.js hasn't booted yet.
+      var appConfirm = window.__ivAppConfirm;
+      var appAlert = window.__ivAppAlert;
+      // OFFLINE GUARD: wiping the SW cache + unregistering while offline would
+      // leave the app un-bootable (no shell to fetch). Refuse the operation
+      // and tell the user to reconnect first.
+      if (navigator && navigator.onLine === false) {
+        if (appAlert) {
+          await appAlert({
+            title: "You're offline",
+            body: "Force refresh is disabled while offline. Connect to the internet first — otherwise wiping the cached app shell would leave the app un-bootable on this device.",
+          });
+        } else {
+          try { window.alert("You're offline. Force refresh is disabled until you reconnect — otherwise the cached app shell would be wiped with nothing to replace it."); } catch (_) {}
+        }
+        return;
+      }
+      var ok;
+      if (appConfirm) {
+        ok = await appConfirm({
+          title: "Force refresh now?",
+          body: "This wipes the cached app shell and reloads from the network. Your library, favorites, and weight are preserved.",
+          okLabel: "Refresh",
+          danger: true,
+        });
+      } else {
+        ok = window.confirm("Force refresh now? This wipes the cached app shell and reloads. Your library and favorites are preserved.");
+      }
+      if (!ok) return;
+      // Second-chance offline check: the network state could have flipped
+      // between the prompt and the confirmation. Still refuse rather than
+      // wipe and leave the user stranded.
+      if (navigator && navigator.onLine === false) {
+        if (appAlert) {
+          await appAlert({
+            title: "Now offline — refresh cancelled",
+            body: "Your device went offline before the refresh started. The cached app shell has not been touched.",
+          });
+        }
+        return;
+      }
       var originalLabel = forceBtn.textContent;
       forceBtn.disabled = true;
       forceBtn.textContent = "Refreshing…";
