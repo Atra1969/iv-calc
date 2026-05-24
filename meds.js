@@ -1617,8 +1617,8 @@ const DEFAULT_MEDS = [
   {
     id: "naloxone",
     name: "Naloxone (Narcan)",
-    category: "Reversal",
-    secondaryCategories: ["Toxicology"],
+    category: "Analgesics",
+    secondaryCategories: ["Reversal", "Toxicology"],
     type: "both",
     bolusConcentrations: [
       { label: "0.4 mg/mL", mg: 0.4, mL: 1 },
@@ -1660,7 +1660,8 @@ const DEFAULT_MEDS = [
   {
     id: "flumazenil",
     name: "Flumazenil",
-    category: "Reversal",
+    category: "Sedation",
+    secondaryCategories: ["Reversal", "Toxicology"],
     type: "bolus",
     concentrations: [
       { label: "0.1 mg/mL", mg: 0.1, mL: 1 }
@@ -1708,14 +1709,23 @@ const DEFAULT_MEDS = [
     name: "Sodium Bicarbonate",
     category: "Reversal",
     secondaryCategories: ["Toxicology"],
-    type: "bolus",
-    concentrations: [
+    type: "both",
+    bolusConcentrations: [
       { label: "1 mEq/mL (8.4%) — per user protocol", mg: 1, mL: 1, isUnits: true, unitsLabel: "mEq" }
+    ],
+    infusionConcentrations: [
+      { label: "150 mEq / 1 L D5W (0.15 mEq/mL)", mg: 150, mL: 1000, isUnits: true, unitsLabel: "mEq" },
+      { label: "150 mEq / 1 L D5 ½ NS (0.15 mEq/mL)", mg: 150, mL: 1000, isUnits: true, unitsLabel: "mEq" }
     ],
     bolus: {
       dose: 1, doseUnit: "mEq", perKg: true,
       min: 0.5, max: 2, maxAbsolute: 100,
-      notes: "TCA tox / salicylate / severe acidosis 1–2 mEq/kg IV. Then continuous infusion 150 mEq in 1 L D5W or D5 ½ NS at 2–3 mL/kg/hr; goal serum pH 7.50–7.55, urine pH 7.5–8 for salicylates (UMHS Tox E-4)."
+      notes: "Push dose: TCA tox / salicylate / severe acidosis 1–2 mEq/kg IV (UMHS Tox E-4). Follow with continuous infusion (see Infusion mode)."
+    },
+    infusion: {
+      dose: 0.3, doseUnit: "mEq", perKg: true, perTime: "hr",
+      min: 0.3, max: 0.45,
+      notes: "Continuous infusion: 150 mEq in 1 L D5W or D5 ½ NS at 2–3 mL/kg/hr (≈ 0.3–0.45 mEq/kg/hr). Goal serum pH 7.50–7.55; urine pH 7.5–8 for salicylates (UMHS Tox E-4). Recheck pH/K q1–2h."
     },
     code: {
       role: "Severe acidosis / TCA tox / hyperK in arrest",
@@ -2063,8 +2073,7 @@ const DEFAULT_MEDS = [
   {
     id: "tranexamic",
     name: "Tranexamic Acid (TXA)",
-    category: "Other",
-    secondaryCategories: ["Toxicology", "Blood Thinners"],
+    category: "Reversal",
     type: "bolus",
     concentrations: [
       { label: "100 mg/mL (1 g / 10 mL vial)", mg: 100, mL: 1 },
@@ -2589,8 +2598,8 @@ const DEFAULT_MEDS = [
   {
     id: "idarucizumab",
     name: "Idarucizumab (Praxbind)",
-    category: "Toxicology",
-    secondaryCategories: ["Blood Thinners", "Reversal"],
+    category: "Reversal",
+    secondaryCategories: ["Blood Thinners", "Toxicology"],
     type: "bolus",
     concentrations: [
       { label: "2.5 g / 50 mL vial (2 vials = 5 g)", mg: 2500, mL: 50 }
@@ -2639,8 +2648,8 @@ const DEFAULT_MEDS = [
   {
     id: "protamine",
     name: "Protamine Sulfate",
-    category: "Toxicology",
-    secondaryCategories: ["Blood Thinners", "Reversal"],
+    category: "Reversal",
+    secondaryCategories: ["Blood Thinners", "Toxicology"],
     type: "bolus",
     concentrations: [
       { label: "10 mg/mL (5 mL or 25 mL vial)", mg: 10, mL: 1 }
@@ -2659,8 +2668,8 @@ const DEFAULT_MEDS = [
   {
     id: "desmopressin",
     name: "Desmopressin (DDAVP)",
-    category: "Toxicology",
-    secondaryCategories: ["Blood Thinners", "Reversal"],
+    category: "Reversal",
+    secondaryCategories: ["Blood Thinners", "Toxicology"],
     type: "bolus",
     concentrations: [
       { label: "4 mcg/mL (1 mL or 10 mL vial)", mg: 0.004, mL: 1 }
@@ -2679,8 +2688,8 @@ const DEFAULT_MEDS = [
   {
     id: "vitamin_k",
     name: "Vitamin K (Phytonadione)",
-    category: "Toxicology",
-    secondaryCategories: ["Blood Thinners", "Reversal"],
+    category: "Reversal",
+    secondaryCategories: ["Blood Thinners", "Toxicology"],
     type: "bolus",
     concentrations: [
       { label: "10 mg/mL ampule", mg: 10, mL: 1 },
@@ -2701,8 +2710,8 @@ const DEFAULT_MEDS = [
   {
     id: "kcentra",
     name: "Kcentra (4-Factor PCC)",
-    category: "Toxicology",
-    secondaryCategories: ["Blood Thinners", "Reversal"],
+    category: "Reversal",
+    secondaryCategories: ["Blood Thinners", "Toxicology"],
     type: "bolus",
     concentrations: [
       { label: "500 units / 20 mL reconstituted (25 units/mL) — dose by units", mg: 25, mL: 1, isUnits: true, unitsLabel: "units" }

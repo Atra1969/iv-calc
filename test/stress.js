@@ -808,6 +808,59 @@ console.log(`\n=== Pass 9: THAM end-to-end (string input → engine) ===`);
   }
 }
 
+// ---- Pass 10: 2026-05-24n Reversal-tab reorganization structural tests ----
+// Confirms category placement after the move. Uses DEFAULT_MEDS directly because
+// that's the source of truth that drives both new-user defaults and the
+// returning-user migration paths in app.js.
+console.log(`\n=== Pass 10: Reversal tab structural tests ===`);
+{
+  const byId = Object.fromEntries(DEFAULT_MEDS.filter(m => m && m.id).map(m => [m.id, m]));
+  const catsOf = (m) => {
+    const out = new Set();
+    if (m && m.category) out.add(m.category);
+    if (m && Array.isArray(m.secondaryCategories)) m.secondaryCategories.forEach(c => out.add(c));
+    return out;
+  };
+  const expectCat = (id, cat, present) => {
+    const m = byId[id];
+    if (!m) { fail++; failures.push(`[reversal] missing med: ${id}`); return; }
+    const has = catsOf(m).has(cat);
+    if (has === present) pass++;
+    else { fail++; failures.push(`[reversal] ${id} ${present ? "missing from" : "still in"} category ${cat}`); }
+  };
+  // Reversal tab must surface all six reversal meds.
+  ["kcentra", "vitamin_k", "protamine", "idarucizumab", "desmopressin", "tranexamic", "sodium_bicarb"]
+    .forEach(id => expectCat(id, "Reversal", true));
+  // TXA must NOT appear in Toxicology or Blood Thinners after the move.
+  expectCat("tranexamic", "Toxicology", false);
+  expectCat("tranexamic", "Blood Thinners", false);
+  expectCat("tranexamic", "Other", false);
+  // Naloxone in Analgesics; Flumazenil in Sedation (primary).
+  {
+    const n = byId["naloxone"];
+    if (n && n.category === "Analgesics") pass++;
+    else { fail++; failures.push(`[reversal] naloxone primary category should be Analgesics, got ${n && n.category}`); }
+    const f = byId["flumazenil"];
+    if (f && f.category === "Sedation") pass++;
+    else { fail++; failures.push(`[reversal] flumazenil primary category should be Sedation, got ${f && f.category}`); }
+  }
+  // Sodium Bicarbonate must have BOTH bolus and infusion configs.
+  {
+    const sb = byId["sodium_bicarb"];
+    if (sb && sb.type === "both" && sb.bolus && sb.infusion
+        && Array.isArray(sb.bolusConcentrations) && sb.bolusConcentrations.length
+        && Array.isArray(sb.infusionConcentrations) && sb.infusionConcentrations.length) pass++;
+    else { fail++; failures.push(`[reversal] sodium_bicarb must be type=both with bolus+infusion concentrations`); }
+  }
+  // Primaries for the moved-out-of-Toxicology meds.
+  [["kcentra","Reversal"],["vitamin_k","Reversal"],["protamine","Reversal"],
+   ["idarucizumab","Reversal"],["desmopressin","Reversal"]].forEach(([id, cat]) => {
+    const m = byId[id];
+    if (m && m.category === cat) pass++;
+    else { fail++; failures.push(`[reversal] ${id} primary should be ${cat}, got ${m && m.category}`); }
+  });
+}
+
 // ---- Summary ----
 console.log(`\n=== RESULTS ===`);
 console.log(`Property test runs: ${propRuns}`);

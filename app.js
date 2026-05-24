@@ -223,6 +223,78 @@
     };
     ["naloxone", "calcium_gluconate", "sodium_bicarb", "magnesium",
      "calcium_chloride_gtt", "tranexamic"].forEach(id => ensureSecondaryCat(id, "Toxicology"));
+    // 2026-05-24n: Reversal tab reorganization.
+    //   - Kcentra, Vitamin K, Protamine, Idarucizumab, DDAVP/Desmopressin:
+    //     primary Toxicology → Reversal (Tox + Blood Thinners as secondary).
+    //   - TXA: primary Other → Reversal; clear Toxicology / Blood Thinners
+    //     secondary appearances per user request to remove from other tabs.
+    //   - Naloxone: primary Reversal → Analgesics (Reversal/Toxicology kept
+    //     as secondary so it still shows in those tabs).
+    //   - Flumazenil: primary Reversal → Sedation (Reversal/Toxicology kept
+    //     as secondary).
+    //   - Sodium Bicarbonate: bolus-only → both (push + infusion). Migration
+    //     adds infusionConcentrations + infusion config only if missing, so
+    //     custom user edits to bolus are preserved.
+    [
+      ["idarucizumab", "Toxicology", "Reversal"],
+      ["protamine",    "Toxicology", "Reversal"],
+      ["desmopressin", "Toxicology", "Reversal"],
+      ["vitamin_k",    "Toxicology", "Reversal"],
+      ["kcentra",      "Toxicology", "Reversal"],
+      ["tranexamic",   "Other",      "Reversal"],
+      ["naloxone",     "Reversal",   "Analgesics"],
+      ["flumazenil",   "Reversal",   "Sedation"],
+    ].forEach(([id, oldCat, newCat]) => moveCat(id, oldCat, newCat));
+    // Rebalance secondaryCategories for the reversed-direction meds: drop
+    // "Reversal" (now the primary) and add Toxicology where it was the old
+    // primary. Idempotent: only mutates when the array still matches the
+    // pre-migration shape.
+    const swapSecondary = (id, drop, add) => {
+      const m = lib.find(x => x && x.id === id);
+      if (!m) return;
+      let arr = Array.isArray(m.secondaryCategories) ? m.secondaryCategories.slice() : [];
+      let mutated = false;
+      if (drop && arr.includes(drop)) { arr = arr.filter(c => c !== drop); mutated = true; }
+      if (add && !arr.includes(add)) { arr.push(add); mutated = true; }
+      if (mutated) { m.secondaryCategories = arr; changed = true; }
+    };
+    ["idarucizumab", "protamine", "desmopressin", "vitamin_k", "kcentra"]
+      .forEach(id => swapSecondary(id, "Reversal", "Toxicology"));
+    // Naloxone / Flumazenil: ensure Reversal stays as a secondary so users
+    // still see them in the Reversal tab even though primary moved out.
+    ensureSecondaryCat("naloxone", "Reversal");
+    ensureSecondaryCat("flumazenil", "Reversal");
+    ensureSecondaryCat("flumazenil", "Toxicology");
+    // TXA: user explicitly asked to remove from other tabs — strip
+    // Toxicology + Blood Thinners from secondaryCategories.
+    const txa = lib.find(x => x && x.id === "tranexamic");
+    if (txa && Array.isArray(txa.secondaryCategories)) {
+      const filtered = txa.secondaryCategories.filter(c => c !== "Toxicology" && c !== "Blood Thinners");
+      if (filtered.length !== txa.secondaryCategories.length) {
+        txa.secondaryCategories = filtered;
+        changed = true;
+      }
+    }
+    // Sodium Bicarbonate: expand to push + infusion. Only migrate if still
+    // on the legacy bolus-only shape so user customizations are preserved.
+    const sb = lib.find(x => x && x.id === "sodium_bicarb");
+    const defSb = hasDefault ? DEFAULT_MEDS.find(m => m && m.id === "sodium_bicarb") : null;
+    if (sb && defSb) {
+      if (sb.type === "bolus" && !sb.infusion) {
+        sb.type = "both";
+        if (Array.isArray(sb.concentrations) && !sb.bolusConcentrations) {
+          sb.bolusConcentrations = sb.concentrations;
+          delete sb.concentrations;
+        }
+        if (defSb.infusionConcentrations) {
+          sb.infusionConcentrations = JSON.parse(JSON.stringify(defSb.infusionConcentrations));
+        }
+        if (defSb.infusion) {
+          sb.infusion = JSON.parse(JSON.stringify(defSb.infusion));
+        }
+        changed = true;
+      }
+    }
     if (changed) {
       try { storage.setItem(STORAGE_KEY, JSON.stringify(lib)); } catch (e) {}
     }
