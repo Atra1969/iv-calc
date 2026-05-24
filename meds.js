@@ -1871,6 +1871,19 @@ const DEFAULT_MEDS = [
       min: 1.1, max: 5.5, maxAbsolute: 1000,
       notes: "Metabolic acidosis: mL of 0.3 M = weight (kg) × base deficit (mEq/L) × 1.1. Cardiac arrest closed-chest: 111–333 mL (3.6–10.8 g) of 0.3 M IV. Adult max single dose 500 mL; severe cases up to 1000 mL. Avoid in anuria/uremia, infants <1 mo. Extravasation causes tissue necrosis — central line preferred."
     },
+    // Optional base-excess–driven formula helper. When present, the bolus
+    // calculator surfaces a small panel that converts a measured arterial BE
+    // into the per-kg dose that the existing concentration×dose engine uses.
+    //   dose_perKg = |BE| × factor   (here factor = 1.1 mL of 0.3 M per mEq/L)
+    // Negative BE = base deficit (the clinical trigger). Positive BE means
+    // alkalosis and the formula is not indicated; the helper warns instead of
+    // computing. This only augments the standard output — it does not replace it.
+    beFormula: {
+      factor: 1.1,
+      factorUnit: "mL of 0.3 M",
+      label: "Acidosis formula",
+      help: "Per FDA PI: mL of 0.3 M THAM = weight (kg) × base deficit (mEq/L) × 1.1. Enter the patient's arterial base excess (mEq/L); base deficit is taken as the absolute value of a negative BE."
+    },
     sources: [
       { label: "FDA THAM (tromethamine) PI — Pfizer", url: "https://labeling.pfizer.com/ShowLabeling.aspx?id=4642" },
       { label: "Medscape THAM Dosing Reference", url: "https://reference.medscape.com/drug/tham-tromethamine-342884" },

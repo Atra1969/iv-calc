@@ -625,6 +625,68 @@ for (const c of PED_CASES) {
   } else pass++;
 }
 
+// =================================================================
+// CASE 4: THAM base-excess formula. Mirrors calcBeFormula() in app.js
+// (pure math): per-kg dose = max(0, -BE) × factor; total mL = per-kg × kg.
+// Verifies BE-driven dose matches the standard concentration×dose engine.
+// =================================================================
+function calcBeFormulaT(beMeqL, weightKg, factor) {
+  if (!isFinite(beMeqL))               return { error: "no_be" };
+  if (!isFinite(factor) || factor <= 0) return { error: "bad_factor" };
+  if (Math.abs(beMeqL) > 40)           return { error: "implausible_be" };
+  const deficit = Math.max(0, -beMeqL);
+  const dosePerKg = deficit * factor;
+  let warn = null;
+  if (beMeqL > 0) warn = "alkalosis";
+  else if (deficit === 0) warn = "no_deficit";
+  let totalMl = null, needsWeight = false;
+  if (weightKg == null || !isFinite(weightKg) || weightKg <= 0) needsWeight = true;
+  else totalMl = dosePerKg * weightKg;
+  return { dosePerKg, totalMl, deficit, warn, needsWeight };
+}
+console.log(`\n=== Pass 7: THAM base-excess formula ===`);
+{
+  const tham = findMed("tham");
+  if (!tham || !tham.beFormula) {
+    fail++; failures.push("THAM should declare a beFormula block");
+  } else {
+    const factor = tham.beFormula.factor;
+    // 70 kg patient, BE = -10 → deficit 10, per-kg = 11 mL, total = 770 mL
+    const r1 = calcBeFormulaT(-10, 70, factor);
+    expect("THAM BE=-10 70kg per-kg", r1.dosePerKg, 11, 1e-9);
+    expect("THAM BE=-10 70kg total",  r1.totalMl,   770, 1e-9);
+    // BE = -5, 80 kg → 5.5 mL/kg, 440 mL
+    const r2 = calcBeFormulaT(-5, 80, factor);
+    expect("THAM BE=-5 80kg per-kg", r2.dosePerKg, 5.5, 1e-9);
+    expect("THAM BE=-5 80kg total",  r2.totalMl,   440, 1e-9);
+    // Positive BE (alkalosis) — must compute zero deficit and warn.
+    const r3 = calcBeFormulaT(4, 70, factor);
+    if (r3.warn === "alkalosis" && r3.dosePerKg === 0) pass++;
+    else { fail++; failures.push(`THAM BE=+4 should warn alkalosis with 0 dose, got ${JSON.stringify(r3)}`); }
+    // Zero BE — no deficit warn.
+    const r4 = calcBeFormulaT(0, 70, factor);
+    if (r4.warn === "no_deficit" && r4.dosePerKg === 0) pass++;
+    else { fail++; failures.push(`THAM BE=0 should warn no_deficit, got ${JSON.stringify(r4)}`); }
+    // Missing weight — needsWeight flag with per-kg still populated.
+    const r5 = calcBeFormulaT(-8, null, factor);
+    if (r5.needsWeight && r5.totalMl === null && r5.dosePerKg === 8.8) pass++;
+    else { fail++; failures.push(`THAM BE=-8 no weight should set needsWeight, got ${JSON.stringify(r5)}`); }
+    // Implausible BE — error.
+    const r6 = calcBeFormulaT(-99, 70, factor);
+    if (r6.error === "implausible_be") pass++;
+    else { fail++; failures.push(`THAM BE=-99 should error implausible_be, got ${JSON.stringify(r6)}`); }
+    // Non-finite BE — error.
+    const r7 = calcBeFormulaT(NaN, 70, factor);
+    if (r7.error === "no_be") pass++;
+    else { fail++; failures.push(`THAM BE=NaN should error no_be`); }
+    // Cross-check vs the standard engine: applying r1.dosePerKg as the per-kg
+    // dose should yield the same total mL volume the BE helper computed.
+    const med = resolvePopulation(tham, "adult");
+    const r8 = calcDose(med, "bolus", 0, 70, r1.dosePerKg);
+    expect("THAM BE-driven dose matches engine mL", r8.mL, r1.totalMl, 1e-9);
+  }
+}
+
 // ---- Summary ----
 console.log(`\n=== RESULTS ===`);
 console.log(`Property test runs: ${propRuns}`);
