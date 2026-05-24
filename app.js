@@ -191,6 +191,38 @@
         changed = true;
       }
     }
+    // 2026-05-24m: Seed UMHS Tox E-4 antidotes into the Toxicology category
+    // for returning users so they appear without wiping any user customizations.
+    // Each id is added only if missing; existing entries with the same id are
+    // left untouched so user edits survive.
+    const TOX_E4_IDS = [
+      "nac", "activated_charcoal", "calcium_chloride_10", "high_dose_insulin",
+      "lipid_emulsion", "digifab", "ethanol_10", "fomepizole", "pralidoxime",
+      "pyridoxine", "octreotide", "glucagon", "phentolamine", "idarucizumab",
+      "andexanet", "protamine", "desmopressin", "vitamin_k", "kcentra",
+      "aminocaproic", "phenobarbital", "ascorbic_acid"
+    ];
+    if (hasDefault) {
+      for (const id of TOX_E4_IDS) {
+        if (lib.some(m => m && m.id === id)) continue;
+        const def = DEFAULT_MEDS.find(m => m && m.id === id);
+        if (def) { lib.push(JSON.parse(JSON.stringify(def))); changed = true; }
+      }
+    }
+    // 2026-05-24m: Cross-list existing meds into Toxicology via secondaryCategories
+    // so they surface under the Toxicology tab too. Idempotent — only adds the
+    // entry if not already present in the user's secondaryCategories array.
+    const ensureSecondaryCat = (id, cat) => {
+      const m = lib.find(x => x && x.id === id);
+      if (!m) return;
+      const arr = Array.isArray(m.secondaryCategories) ? m.secondaryCategories : [];
+      if (!arr.includes(cat)) {
+        m.secondaryCategories = arr.concat([cat]);
+        changed = true;
+      }
+    };
+    ["naloxone", "calcium_gluconate", "sodium_bicarb", "magnesium",
+     "calcium_chloride_gtt", "tranexamic"].forEach(id => ensureSecondaryCat(id, "Toxicology"));
     if (changed) {
       try { storage.setItem(STORAGE_KEY, JSON.stringify(lib)); } catch (e) {}
     }

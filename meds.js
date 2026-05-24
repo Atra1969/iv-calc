@@ -30,6 +30,7 @@ const UMHS_PEDS_SRC  = { label: "UMHS PICU Continuous Infusion Guidelines (2023)
 const UMHS_NICU_SRC  = { label: "UMHS Brandon NICU IV Medication Guidelines (2023)", url: "refs/umhs-nicu-2023.pdf" };
 const UMHS_MCHC_SRC  = { label: "UMHS Michigan Congenital Heart Center IV Guidelines (2021)", url: "refs/umhs-mchc-2021.pdf" };
 const UMHS_ARDS_SRC  = { label: "UMHS ARDS Management Guideline — Appendix B-1 (THAM 0.3 M, Figure 6)", url: "refs/umhs-ards-b1-2024.pdf" };
+const UMHS_TOX_SRC   = { label: "UMHS Survival Flight Clinical Guideline E-4: Toxicologic Emergencies (rev. Nov 2023)", url: "refs/umhs-toxicologic-emergencies-e4-2024.pdf" };
 
 const DEFAULT_MEDS = [
   // ---------------- PRESSORS ----------------
@@ -1218,14 +1219,16 @@ const DEFAULT_MEDS = [
       concHint: "PALS minimum dose 0.1 mg, single max 0.5 mg."
     },
     sources: [
-      { label: "AHA ACLS 2020", url: "https://www.ahajournals.org/doi/10.1161/CIR.0000000000000916" }
+      { label: "AHA ACLS 2020", url: "https://www.ahajournals.org/doi/10.1161/CIR.0000000000000916" },
+      UMHS_TOX_SRC
     ],
+    notes: "Cholinergic crisis / organophosphate / nerve agent: adult 1–5 mg IV (mild–mod 1–2 mg, severe 3–5 mg), double q3–5 min until bronchial secretions controlled; peds 0.05–0.1 mg/kg q5–10 min, double escalating. Once stable: infusion 10–20% of cumulative atropinizing dose per hr (UMHS Tox E-4).",
     populations: {
       pediatric: {
         bolus: {
-          dose: 0.02, doseUnit: "mg", perKg: true,
-          min: 0.02, max: 0.04, maxAbsolute: 1,
-          notes: "Pediatric: 0.02 mg/kg IV (min 0.1 mg, max 1 mg/dose)."
+          dose: 0.05, doseUnit: "mg", perKg: true,
+          min: 0.02, max: 0.1, maxAbsolute: 5,
+          notes: "Pediatric bradycardia: 0.02 mg/kg IV (min 0.1 mg, max 1 mg/dose). Cholinergic crisis: 0.05–0.1 mg/kg IV, double q5–10 min until secretions controlled (UMHS Tox E-4)."
         }
       }
     }
@@ -1615,6 +1618,7 @@ const DEFAULT_MEDS = [
     id: "naloxone",
     name: "Naloxone (Narcan)",
     category: "Reversal",
+    secondaryCategories: ["Toxicology"],
     type: "both",
     bolusConcentrations: [
       { label: "0.4 mg/mL", mg: 0.4, mL: 1 },
@@ -1641,7 +1645,7 @@ const DEFAULT_MEDS = [
     },
     sources: [
       { label: "FDA Naloxone PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=naloxone" },
-      UMHS_ADULT_SRC, UMHS_PEDS_SRC
+      UMHS_ADULT_SRC, UMHS_PEDS_SRC, UMHS_TOX_SRC
     ],
     populations: {
       pediatric: {
@@ -1674,6 +1678,7 @@ const DEFAULT_MEDS = [
     id: "calcium_gluconate",
     name: "Calcium Gluconate",
     category: "Reversal",
+    secondaryCategories: ["Toxicology"],
     type: "bolus",
     concentrations: [
       { label: "100 mg/mL (10%)", mg: 100, mL: 1 },
@@ -1702,6 +1707,7 @@ const DEFAULT_MEDS = [
     id: "sodium_bicarb",
     name: "Sodium Bicarbonate",
     category: "Reversal",
+    secondaryCategories: ["Toxicology"],
     type: "bolus",
     concentrations: [
       { label: "1 mEq/mL (8.4%) — per user protocol", mg: 1, mL: 1, isUnits: true, unitsLabel: "mEq" }
@@ -1709,7 +1715,7 @@ const DEFAULT_MEDS = [
     bolus: {
       dose: 1, doseUnit: "mEq", perKg: true,
       min: 0.5, max: 2, maxAbsolute: 100,
-      notes: "TCA tox / severe acidosis 1–2 mEq/kg IV."
+      notes: "TCA tox / salicylate / severe acidosis 1–2 mEq/kg IV. Then continuous infusion 150 mEq in 1 L D5W or D5 ½ NS at 2–3 mL/kg/hr; goal serum pH 7.50–7.55, urine pH 7.5–8 for salicylates (UMHS Tox E-4)."
     },
     code: {
       role: "Severe acidosis / TCA tox / hyperK in arrest",
@@ -1718,7 +1724,8 @@ const DEFAULT_MEDS = [
       concHint: "8.4% = 1 mEq/mL. Dilute 1:1 with sterile water for infants."
     },
     sources: [
-      { label: "FDA Sodium Bicarbonate PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=sodium+bicarbonate+injection" }
+      { label: "FDA Sodium Bicarbonate PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=sodium+bicarbonate+injection" },
+      UMHS_TOX_SRC
     ]
   },
   {
@@ -1899,6 +1906,7 @@ const DEFAULT_MEDS = [
     id: "magnesium",
     name: "Magnesium Sulfate",
     category: "Electrolytes",
+    secondaryCategories: ["Toxicology"],
     type: "bolus",
     concentrations: [
       { label: "500 mg/mL (50%)", mg: 500, mL: 1 },
@@ -1987,6 +1995,7 @@ const DEFAULT_MEDS = [
     id: "calcium_chloride_gtt",
     name: "Calcium Chloride infusion",
     category: "Electrolytes",
+    secondaryCategories: ["Toxicology"],
     type: "infusion",
     concentrations: [
       { label: "1 g / 100 mL (10 mg/mL)", mg: 1000, mL: 100 }
@@ -2055,6 +2064,7 @@ const DEFAULT_MEDS = [
     id: "tranexamic",
     name: "Tranexamic Acid (TXA)",
     category: "Other",
+    secondaryCategories: ["Toxicology", "Blood Thinners"],
     type: "bolus",
     concentrations: [
       { label: "100 mg/mL (1 g / 10 mL vial)", mg: 100, mL: 1 },
@@ -2128,7 +2138,7 @@ const DEFAULT_MEDS = [
     sources: [
       { label: "FDA Methylene Blue Injection PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=methylene+blue+injection" },
       { label: "AAP Methemoglobinemia Treatment", url: "https://www.ncbi.nlm.nih.gov/books/NBK537317/" },
-      UMHS_ADULT_SRC, UMHS_PEDS_SRC
+      UMHS_ADULT_SRC, UMHS_PEDS_SRC, UMHS_TOX_SRC
     ],
     populations: {
       pediatric: {
@@ -2167,7 +2177,7 @@ const DEFAULT_MEDS = [
     sources: [
       { label: "FDA Cyanokit (hydroxocobalamin) PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=cyanokit" },
       { label: "AHA Smoke Inhalation / Cyanide Guidance", url: "https://www.ahajournals.org/doi/10.1161/CIR.0000000000000916" },
-      UMHS_ADULT_SRC, UMHS_PEDS_SRC
+      UMHS_ADULT_SRC, UMHS_PEDS_SRC, UMHS_TOX_SRC
     ],
     populations: {
       pediatric: {
@@ -2185,6 +2195,597 @@ const DEFAULT_MEDS = [
           notes: "Neonatal cyanide toxicity: 70 mg/kg IV over 15 min. Limited data — use weight-based pediatric dosing."
         },
         notes: "Neonatal: limited data. Use weight-based pediatric dose (70 mg/kg IV)."
+      }
+    }
+  },
+  {
+    id: "nac",
+    name: "N-Acetylcysteine (Acetadote)",
+    category: "Toxicology",
+    type: "both",
+    bolusConcentrations: [
+      { label: "200 mg/mL (20% vial, 30 mL = 6 g)", mg: 200, mL: 1 },
+      { label: "Phase 1: 150 mg/kg in 200 mL D5W over 60 min", mg: 200, mL: 1 }
+    ],
+    infusionConcentrations: [
+      { label: "Phase 2: 50 mg/kg in 500 mL D5W (4 mg/mL) over 4 hr", mg: 50, mL: 500 },
+      { label: "Phase 3: 100 mg/kg in 1000 mL D5W (4 mg/mL) over 16 hr", mg: 100, mL: 1000 }
+    ],
+    bolus: {
+      dose: 150, doseUnit: "mg", perKg: true,
+      min: 150, max: 150, maxAbsolute: 15000,
+      notes: "Phase 1 loading dose: 150 mg/kg in 200 mL D5W IV over 60 min (UMHS Tox E-4)."
+    },
+    infusion: {
+      dose: 12.5, doseUnit: "mg", perKg: true, perTime: "hr",
+      min: 6.25, max: 12.5,
+      notes: "Phase 2 (next 4 hr): 12.5 mg/kg/hr (50 mg/kg in 500 mL D5W over 4 hr). Phase 3 (next 16 hr): 6.25 mg/kg/hr (100 mg/kg in 1000 mL D5W over 16 hr). Continue at 6.25 mg/kg/hr beyond 21 hr if transaminases remain elevated or APAP detectable. Pediatric: reduce diluent volume to avoid hyponatremia."
+    },
+    notes: "Indication: acetaminophen overdose. 21-hr IV protocol total = 300 mg/kg. Anaphylactoid reactions common during loading — slow infusion, treat with diphenhydramine, do not discontinue. Source of truth: UMHS Survival Flight Tox E-4 Appendix.",
+    sources: [
+      { label: "FDA Acetadote (NAC) PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=acetylcysteine+injection" },
+      { label: "Rumack-Matthew nomogram (PCN guidance)", url: "https://www.poison.org/articles/acetaminophen-poisoning" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "activated_charcoal",
+    name: "Activated Charcoal",
+    category: "Toxicology",
+    type: "bolus",
+    concentrations: [
+      { label: "Slurry (e.g. 25 g / 120 mL) — dose by g", mg: 1000, mL: 1, isUnits: true, unitsLabel: "g" }
+    ],
+    bolus: {
+      dose: 1, doseUnit: "g", perKg: true,
+      min: 0.5, max: 1, maxAbsolute: 100,
+      notes: "Adult 1 g/kg PO/gastric tube; pediatric 0.5–1 g/kg. Most effective within 1 hr of ingestion. Dabigatran/factor Xa OD: fixed 50 g dose if ingestion <2 h (dabigatran) or <8 h (rivaroxaban/apixaban). Contraindicated: caustics, hydrocarbons, unprotected airway."
+    },
+    notes: "Route is PO or via gastric tube — listed here as a clinically critical antidote calculator. Avoid in: altered LOC without secured airway, caustic ingestions, hydrocarbons, bowel obstruction. Multi-dose charcoal indicated for enterohepatic-recirculated drugs (theophylline, carbamazepine, phenobarbital, dapsone, quinine).",
+    sources: [
+      { label: "AAPCC Position Paper: Single-Dose Activated Charcoal", url: "https://www.tandfonline.com/doi/full/10.1080/15563650.2014.928721" },
+      UMHS_TOX_SRC
+    ],
+    populations: {
+      pediatric: {
+        bolus: {
+          dose: 0.75, doseUnit: "g", perKg: true,
+          min: 0.5, max: 1, maxAbsolute: 50,
+          notes: "Pediatric: 0.5–1 g/kg PO/NG (UMHS Tox E-4)."
+        }
+      }
+    }
+  },
+  {
+    id: "calcium_chloride_10",
+    name: "Calcium Chloride 10% (bolus)",
+    category: "Toxicology",
+    secondaryCategories: ["Electrolytes"],
+    type: "both",
+    bolusConcentrations: [
+      { label: "100 mg/mL (10%, 1 g / 10 mL)", mg: 100, mL: 1 }
+    ],
+    infusionConcentrations: [
+      { label: "1 g / 100 mL (10 mg/mL)", mg: 1000, mL: 100 }
+    ],
+    bolus: {
+      dose: 20, doseUnit: "mg", perKg: true,
+      min: 20, max: 20, maxAbsolute: 2000,
+      notes: "CCB/BB toxicity: 20 mg/kg IV bolus (max 2 g per dose). May repeat. Vesicant — central line strongly preferred."
+    },
+    infusion: {
+      dose: 20, doseUnit: "mg", perKg: true, perTime: "hr",
+      min: 20, max: 40,
+      notes: "UMHS Tox E-4 CCB/BB: 20–40 mg/kg/hr continuous infusion after bolus. Monitor ionized calcium q1–2 hr."
+    },
+    code: {
+      role: "CCB / β-blocker toxicity, hyperkalemia, hypocalcemia in arrest",
+      adult: { dose: 20, unit: "mg", perKg: true, max: 2000, route: "IV/IO slow push (central preferred)", repeat: "May repeat q10 min" },
+      pediatric: { dose: 20, unit: "mg", perKg: true, max: 1000, route: "IV/IO slow push", repeat: "May repeat" },
+      concHint: "10% CaCl₂ = 100 mg/mL = 1 g / 10 mL. Vesicant — central line preferred."
+    },
+    notes: "Toxicology indication (UMHS Tox E-4): CCB/BB poisoning bolus 20 mg/kg max 2 g, then 20–40 mg/kg/hr infusion. CaCl₂ provides 3× elemental calcium of equivalent gluconate dose.",
+    sources: [
+      { label: "FDA Calcium Chloride Injection PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=calcium+chloride+injection" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "high_dose_insulin",
+    name: "High-Dose Insulin (HDI, Regular)",
+    category: "Toxicology",
+    type: "both",
+    bolusConcentrations: [
+      { label: "Regular insulin 100 units/mL (U-100 vial)", mg: 100, mL: 1, isUnits: true, unitsLabel: "units" }
+    ],
+    infusionConcentrations: [
+      { label: "100 units / 100 mL NS (1 unit/mL)", mg: 100, mL: 100, isUnits: true, unitsLabel: "units" },
+      { label: "500 units / 250 mL NS (2 units/mL)", mg: 500, mL: 250, isUnits: true, unitsLabel: "units" }
+    ],
+    bolus: {
+      dose: 1, doseUnit: "units", perKg: true,
+      min: 1, max: 1, maxAbsolute: 100,
+      notes: "CCB / β-blocker toxicity loading dose: 1 unit/kg IV regular insulin (UMHS Tox E-4). Give D50 25 g concurrently if BGL <250."
+    },
+    infusion: {
+      dose: 1, doseUnit: "units", perKg: true, perTime: "hr",
+      min: 0.5, max: 10,
+      notes: "HDI infusion: 1 unit/kg/hr regular insulin. Titrate up to 10 unit/kg/hr per clinical response — some refractory cases require very high doses. REQUIRED concurrent D10W or D25W infusion + q15–30 min glucose checks. Replete K+, Mg, phos."
+    },
+    notes: "Indication: CCB or β-blocker toxicity with shock. Mechanism: insulin overcomes myocardial insulin resistance, improves inotropy. Concurrent dextrose infusion is mandatory (start D10W 100 mL/hr or D25W via central line). Monitor BGL q15–30 min × 1 hr, then q1 hr. Watch for hypokalemia.",
+    sources: [
+      { label: "AACT/EAPCCT Position: HDI for CCB Tox", url: "https://www.tandfonline.com/doi/full/10.1080/15563650.2018.1485938" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "lipid_emulsion",
+    name: "Lipid Emulsion 20% (Intralipid)",
+    category: "Toxicology",
+    type: "both",
+    bolusConcentrations: [
+      { label: "20% emulsion (250 mL bag) — dose by mL of 20%", mg: 1, mL: 1, isUnits: true, unitsLabel: "mL of 20%" }
+    ],
+    infusionConcentrations: [
+      { label: "20% emulsion (250 mL bag) — dose by mL of 20%", mg: 1, mL: 1, isUnits: true, unitsLabel: "mL of 20%" }
+    ],
+    bolus: {
+      dose: 1.5, doseUnit: "mL of 20%", perKg: true,
+      min: 1.5, max: 1.5, maxAbsolute: 150,
+      notes: "Rescue bolus: 1.5 mL/kg of 20% lipid emulsion IV over 2–3 min. Indications: local-anesthetic systemic toxicity (LAST); rescue therapy for CCB, β-blocker, TCA, lipophilic cardiotoxin overdose unresponsive to standard care (UMHS Tox E-4)."
+    },
+    infusion: {
+      dose: 0.25, doseUnit: "mL of 20%", perKg: true, perTime: "min",
+      min: 0.25, max: 0.5,
+      notes: "Continuous infusion 0.25 mL/kg/min × 60 min after bolus (~15 mL/kg/hr). May increase to 0.5 mL/kg/min if persistent instability. Cumulative max ~10 mL/kg in first 30 min. Consult Poison Control (1-800-222-1222) and ASRA LAST checklist."
+    },
+    notes: "Use dedicated peripheral IV — incompatible with most drugs. Risk: pancreatitis, ARDS, lab interference (24–48 hr). Source: ASRA 2021 LAST update + UMHS Tox E-4.",
+    sources: [
+      { label: "ASRA LAST Checklist 2020", url: "https://www.asra.com/guidelines-articles/guidelines/guideline-item/guidelines/2020/11/01/checklist-for-treatment-of-local-anesthetic-systemic-toxicity" },
+      { label: "lipidrescue.org", url: "https://www.lipidrescue.org/" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "digifab",
+    name: "Digoxin Immune Fab (DigiFab)",
+    category: "Toxicology",
+    type: "bolus",
+    concentrations: [
+      { label: "40 mg / vial reconstituted in 4 mL (10 mg/mL) — dose by vial", mg: 1, mL: 1, isUnits: true, unitsLabel: "vials" }
+    ],
+    bolus: {
+      dose: 10, doseUnit: "vials", perKg: false,
+      min: 5, max: 20, maxAbsolute: 20,
+      notes: "Cardiac arrest / near-arrest from digoxin tox: ADULT 10 vials slow IVP; PEDIATRIC 5 vials slow IVP. All others (chronic tox, known ingested dose, known serum digoxin level): consult Poison Control for vial calculation and administer over 30 min via 0.22-micron filter (UMHS Tox E-4)."
+    },
+    notes: "Empiric chronic dosing: adult 3–6 vials; peds 1–2 vials. Calculated by ingested mg: vials = (mg ingested × 0.8) / 0.5. Calculated by serum level: vials = (serum dig ng/mL × wt kg) / 100. Each vial binds ~0.5 mg digoxin. Indications: arrhythmia, K+ > 5 in acute tox, end-organ dysfunction. Anaphylaxis risk — ovine product.",
+    sources: [
+      { label: "FDA DigiFab PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=digoxin+immune+fab" },
+      UMHS_TOX_SRC
+    ],
+    populations: {
+      pediatric: {
+        bolus: {
+          dose: 5, doseUnit: "vials", perKg: false,
+          min: 1, max: 10, maxAbsolute: 10,
+          notes: "Pediatric arrest/near-arrest: 5 vials slow IVP. Otherwise calculate per serum level or ingested dose with Poison Control."
+        }
+      }
+    }
+  },
+  {
+    id: "ethanol_10",
+    name: "Ethanol 10% IV",
+    category: "Toxicology",
+    type: "both",
+    bolusConcentrations: [
+      { label: "10% ethanol (100 mg/mL) — dose by mL of 10%", mg: 1, mL: 1, isUnits: true, unitsLabel: "mL of 10%" }
+    ],
+    infusionConcentrations: [
+      { label: "10% ethanol (100 mg/mL) — dose by mL of 10%", mg: 1, mL: 1, isUnits: true, unitsLabel: "mL of 10%" }
+    ],
+    bolus: {
+      dose: 10, doseUnit: "mL of 10%", perKg: true,
+      min: 10, max: 10, maxAbsolute: 1000,
+      notes: "Methanol or ethylene glycol toxicity (alternative to fomepizole): loading dose 10 mL/kg of 10% ethanol IV over 30 min (UMHS Tox E-4)."
+    },
+    infusion: {
+      dose: 1.2, doseUnit: "mL of 10%", perKg: true, perTime: "hr",
+      min: 1.2, max: 1.5,
+      notes: "Maintenance: 1.2 mL/kg/hr of 10% ethanol (adjust to keep serum ethanol level 100–150 mg/dL). Increase 50–100% during hemodialysis. Monitor BGL q1–2 h (hypoglycemia common, especially peds). Fomepizole strongly preferred when available."
+    },
+    notes: "Indications: methanol or ethylene glycol poisoning when fomepizole unavailable. Central line preferred for 10% concentration. Monitor for hypoglycemia (especially pediatrics), CNS depression, lactic acidosis. Confirm with serum ethanol levels.",
+    sources: [
+      { label: "AACT/EAPCCT Position: Methanol Tox", url: "https://www.tandfonline.com/doi/abs/10.1081/CLT-120014645" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "fomepizole",
+    name: "Fomepizole (Antizol)",
+    category: "Toxicology",
+    type: "bolus",
+    concentrations: [
+      { label: "1 g/mL (1.5 mL vial) — dilute in 100 mL NS/D5W", mg: 1000, mL: 1 },
+      { label: "Diluted 100 mg/mL", mg: 100, mL: 1 }
+    ],
+    bolus: {
+      dose: 15, doseUnit: "mg", perKg: true,
+      min: 10, max: 15, maxAbsolute: 1500,
+      notes: "Methanol / ethylene glycol toxicity. Loading: 15 mg/kg IV over 30 min. Then 10 mg/kg q12h × 4 doses, then 15 mg/kg q12h until level <20 mg/dL and asymptomatic. Increase frequency during hemodialysis (q4h or run as 1–1.5 mg/kg/hr drip)."
+    },
+    notes: "First-line antidote for toxic alcohol ingestion (preferred over ethanol). Must dilute in ≥100 mL NS or D5W and infuse over ≥30 min — irritating to vein. Monitor electrolytes, anion gap, osmolal gap, serum level if available. Source: UMHS Tox E-4.",
+    sources: [
+      { label: "FDA Antizol (fomepizole) PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=fomepizole" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "pralidoxime",
+    name: "Pralidoxime (2-PAM, Protopam)",
+    category: "Toxicology",
+    type: "both",
+    bolusConcentrations: [
+      { label: "1 g / 20 mL (50 mg/mL) reconstituted", mg: 50, mL: 1 },
+      { label: "1 g / 100 mL NS (10 mg/mL) diluted", mg: 1000, mL: 100 }
+    ],
+    infusionConcentrations: [
+      { label: "1 g / 100 mL NS (10 mg/mL)", mg: 1000, mL: 100 },
+      { label: "2 g / 100 mL NS (20 mg/mL)", mg: 2000, mL: 100 }
+    ],
+    bolus: {
+      dose: 30, doseUnit: "mg", perKg: true,
+      min: 30, max: 30, maxAbsolute: 2000,
+      notes: "Organophosphate / nerve agent poisoning: 30 mg/kg IV over 20 min (max 2 g per dose). Give in addition to atropine — atropine for muscarinic Sx, pralidoxime for nicotinic Sx + AChE reactivation."
+    },
+    infusion: {
+      dose: 8, doseUnit: "mg", perKg: true, perTime: "hr",
+      min: 8, max: 10,
+      notes: "After loading dose: 8–10 mg/kg/hr continuous IV (max 500 mg/hr). Continue until symptoms resolve and atropine no longer needed. Source: UMHS Tox E-4."
+    },
+    notes: "Most effective within 24–48 hr of OP exposure (before AChE \"aging\"). Side effects: hypertension during rapid infusion (slow rate), neuromuscular blockade at high doses, transient AST elevation. Renally cleared.",
+    sources: [
+      { label: "FDA Protopam (pralidoxime) PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=pralidoxime" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "pyridoxine",
+    name: "Pyridoxine (Vitamin B6)",
+    category: "Toxicology",
+    type: "bolus",
+    concentrations: [
+      { label: "100 mg/mL (10% vial, 10 mL = 1 g)", mg: 100, mL: 1 }
+    ],
+    bolus: {
+      dose: 5000, doseUnit: "mg", perKg: false,
+      min: 5000, max: 5000, maxAbsolute: 5000,
+      notes: "Adult INH (isoniazid) overdose: 5 g IV (1 g per 1 g INH ingested, empiric 5 g if unknown). May repeat q5–10 min until seizures controlled. Also: hydrazine, gyromitra mushroom, ethylene glycol adjunct."
+    },
+    notes: "Reverses GABA-mediated seizures from INH overdose. Administer as IV push 0.5 g/min, or dilute in 50 mL NS and infuse over 30 min if non-emergent. Source: UMHS Tox E-4.",
+    sources: [
+      { label: "FDA Pyridoxine HCl PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=pyridoxine" },
+      UMHS_TOX_SRC
+    ],
+    populations: {
+      pediatric: {
+        bolus: {
+          dose: 70, doseUnit: "mg", perKg: true,
+          min: 70, max: 70, maxAbsolute: 5000,
+          notes: "Pediatric INH overdose: 70 mg/kg IV (max 5 g) — UMHS Tox E-4."
+        }
+      }
+    }
+  },
+  {
+    id: "octreotide",
+    name: "Octreotide (Sandostatin)",
+    category: "Toxicology",
+    type: "both",
+    bolusConcentrations: [
+      { label: "100 mcg/mL (1 mL ampule)", mg: 0.1, mL: 1 },
+      { label: "200 mcg/mL (multidose vial)", mg: 0.2, mL: 1 }
+    ],
+    infusionConcentrations: [
+      { label: "500 mcg / 250 mL NS (2 mcg/mL)", mg: 0.5, mL: 250 }
+    ],
+    bolus: {
+      dose: 100, doseUnit: "mcg", perKg: false,
+      min: 50, max: 125, maxAbsolute: 125,
+      notes: "Sulfonylurea-induced hypoglycemia: 100 mcg SQ q6–12h (1–3 doses) OR 50–125 mcg/hr IV infusion. Adult. Pediatric: 2 mcg/kg SQ per dose (UMHS Tox E-4)."
+    },
+    infusion: {
+      dose: 75, doseUnit: "mcg", perKg: false, perTime: "hr",
+      min: 50, max: 125,
+      notes: "Continuous IV: 50–125 mcg/hr until refractory hypoglycemia resolves (typically 24 hr after last sulfonylurea dose)."
+    },
+    notes: "Indication: refractory hypoglycemia from sulfonylurea or meglitinide overdose. Mechanism: suppresses pancreatic insulin release. Always continue dextrose supplementation alongside. Source: UMHS Tox E-4.",
+    sources: [
+      { label: "FDA Sandostatin (octreotide) PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=octreotide" },
+      UMHS_TOX_SRC
+    ],
+    populations: {
+      pediatric: {
+        bolus: {
+          dose: 2, doseUnit: "mcg", perKg: true,
+          min: 1, max: 2, maxAbsolute: 100,
+          notes: "Pediatric sulfonylurea-induced hypoglycemia: 2 mcg/kg SQ per dose (UMHS Tox E-4)."
+        }
+      }
+    }
+  },
+  {
+    id: "glucagon",
+    name: "Glucagon",
+    category: "Toxicology",
+    type: "both",
+    bolusConcentrations: [
+      { label: "1 mg/mL reconstituted", mg: 1, mL: 1 }
+    ],
+    infusionConcentrations: [
+      { label: "5 mg / 50 mL D5W (0.1 mg/mL)", mg: 5, mL: 50 },
+      { label: "10 mg / 100 mL D5W (0.1 mg/mL)", mg: 10, mL: 100 }
+    ],
+    bolus: {
+      dose: 5, doseUnit: "mg", perKg: false,
+      min: 5, max: 10, maxAbsolute: 10,
+      notes: "Adult β-blocker (or CCB) toxicity: 5–10 mg IV push, may repeat. Pretreat with antiemetic — high doses cause vomiting."
+    },
+    infusion: {
+      dose: 5, doseUnit: "mg", perKg: false, perTime: "hr",
+      min: 1, max: 10,
+      notes: "Adult infusion after bolus: 1–10 mg/hr titrated to HR and BP (UMHS Tox E-4). Pediatric: 50 mcg/kg/hr infusion after 50–150 mcg/kg IV bolus."
+    },
+    notes: "β-receptor–independent inotrope/chronotrope (cAMP via direct Gs activation). Indications: BB toxicity (1st-line), CCB toxicity, refractory anaphylaxis on β-blockers. Side effects: vomiting, hyperglycemia, hypokalemia. Tachyphylaxis common — back up with HDI / lipid / pressors.",
+    sources: [
+      { label: "FDA Glucagon PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=glucagon" },
+      UMHS_TOX_SRC
+    ],
+    populations: {
+      pediatric: {
+        bolus: {
+          dose: 100, doseUnit: "mcg", perKg: true,
+          min: 50, max: 150, maxAbsolute: 10000,
+          notes: "Pediatric BB/CCB toxicity: 50–150 mcg/kg IV bolus (UMHS Tox E-4)."
+        },
+        infusion: {
+          dose: 50, doseUnit: "mcg", perKg: true, perTime: "hr",
+          min: 50, max: 150,
+          notes: "Pediatric infusion: 50 mcg/kg/hr after bolus."
+        }
+      }
+    }
+  },
+  {
+    id: "phentolamine",
+    name: "Phentolamine (Regitine)",
+    category: "Toxicology",
+    secondaryCategories: ["Antihypertensives"],
+    type: "bolus",
+    concentrations: [
+      { label: "5 mg/mL reconstituted", mg: 5, mL: 1 }
+    ],
+    bolus: {
+      dose: 5, doseUnit: "mg", perKg: false,
+      min: 2.5, max: 5, maxAbsolute: 20,
+      notes: "Cocaine / amphetamine / pheochromocytoma hypertensive crisis: 5 mg IV q5–15 min PRN. Also: extravasation of α-agonist (norepi, dopamine, phenylephrine) — 5–10 mg in 10 mL NS infiltrated locally within 12 hr."
+    },
+    notes: "Non-selective α-blocker. Avoid β-blocker monotherapy in cocaine tox (unopposed α-stimulation worsens HTN). Source: UMHS Tox E-4.",
+    sources: [
+      { label: "FDA Phentolamine Mesylate PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=phentolamine" },
+      UMHS_TOX_SRC
+    ],
+    populations: {
+      pediatric: {
+        bolus: {
+          dose: 0.05, doseUnit: "mg", perKg: true,
+          min: 0.05, max: 0.1, maxAbsolute: 5,
+          notes: "Pediatric: 0.05–0.1 mg/kg IV q5 min PRN (max 5 mg/dose)."
+        }
+      }
+    }
+  },
+  {
+    id: "idarucizumab",
+    name: "Idarucizumab (Praxbind)",
+    category: "Toxicology",
+    secondaryCategories: ["Blood Thinners", "Reversal"],
+    type: "bolus",
+    concentrations: [
+      { label: "2.5 g / 50 mL vial (2 vials = 5 g)", mg: 2500, mL: 50 }
+    ],
+    bolus: {
+      dose: 5000, doseUnit: "mg", perKg: false,
+      min: 5000, max: 5000, maxAbsolute: 5000,
+      notes: "Dabigatran reversal: 5 g IV total (2 × 2.5 g vials) given as two consecutive boluses or rapid infusion within 15 min via a DEDICATED IV line. Do not mix with other drugs. If unavailable: Kcentra 50 units/kg max 5000 (UMHS Tox E-4)."
+    },
+    notes: "Humanized monoclonal Fab fragment that binds dabigatran with 350× the affinity of thrombin. Effect within minutes; dabigatran levels may rebound at 12–24 hr — repeat 5 g dose if recurrent bleeding/severe coagulopathy. No effect on rivaroxaban/apixaban/heparin. Source: UMHS Tox E-4.",
+    sources: [
+      { label: "FDA Praxbind (idarucizumab) PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=idarucizumab" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "andexanet",
+    name: "Andexanet alfa (Andexxa)",
+    category: "Toxicology",
+    secondaryCategories: ["Blood Thinners", "Reversal"],
+    type: "both",
+    bolusConcentrations: [
+      { label: "Low dose: 400 mg / 250 mL NS", mg: 400, mL: 250 },
+      { label: "High dose: 800 mg / 250 mL NS", mg: 800, mL: 250 }
+    ],
+    infusionConcentrations: [
+      { label: "Low-dose follow-on: 480 mg / 250 mL NS", mg: 480, mL: 250 },
+      { label: "High-dose follow-on: 960 mg / 250 mL NS", mg: 960, mL: 250 }
+    ],
+    bolus: {
+      dose: 400, doseUnit: "mg", perKg: false,
+      min: 400, max: 800, maxAbsolute: 800,
+      notes: "Bolus for ICH from rivaroxaban/apixaban. LOW DOSE (last dose >8 h ago OR last dose ≤8 h apixaban ≤5 mg / rivaroxaban ≤10 mg): 400 mg at 30 mg/min × ~15 min. HIGH DOSE (last dose <8 h ago or unknown of higher doses): 800 mg at 30 mg/min × ~30 min. MUST use 0.2-micron inline filter."
+    },
+    infusion: {
+      dose: 240, doseUnit: "mg", perKg: false, perTime: "hr",
+      min: 240, max: 480,
+      notes: "Follow-on infusion × 2 hr. LOW dose: 480 mg over 2 hr (4 mg/min = 240 mg/hr ≈ 125 mL/hr). HIGH dose: 960 mg over 2 hr (8 mg/min = 480 mg/hr). Must use 0.2-micron inline filter. Source: UMHS Tox E-4."
+    },
+    notes: "Recombinant modified Factor Xa decoy that binds rivaroxaban/apixaban (off-label: edoxaban, fondaparinux, enoxaparin). Indicated for life-threatening ICH; for life-threatening non-ICH bleeding consider Kcentra 50 units/kg (max 5000) instead. Thrombotic risk — resume anticoagulation when bleeding controlled. Cost: ~$50,000/dose.",
+    sources: [
+      { label: "FDA Andexxa PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=andexanet" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "protamine",
+    name: "Protamine Sulfate",
+    category: "Toxicology",
+    secondaryCategories: ["Blood Thinners", "Reversal"],
+    type: "bolus",
+    concentrations: [
+      { label: "10 mg/mL (5 mL or 25 mL vial)", mg: 10, mL: 1 }
+    ],
+    bolus: {
+      dose: 50, doseUnit: "mg", perKg: false,
+      min: 25, max: 50, maxAbsolute: 50,
+      notes: "Heparin drip reversal: 1 mg protamine per 100 units heparin received in last 3 hr (max 50 mg per dose). Heparin SQ: 1 mg per 100 units in last 8 hr. LMWH (enoxaparin) <8 h: 1 mg per 1 mg enoxaparin (max 50 mg); >8 h: half dose. Infuse SLOWLY over ≥10 min — rapid push causes hypotension, bradycardia, pulmonary HTN, anaphylactoid reaction. Higher risk: fish allergy, prior protamine exposure, vasectomy."
+    },
+    notes: "Calculation example: heparin 1500 u/hr × 3 hr = 4500 units → 45 mg protamine. Source: UMHS Tox E-4. Repeat 25 mg as needed if heparin rebound (aPTT remains elevated at 2–4 hr).",
+    sources: [
+      { label: "FDA Protamine Sulfate PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=protamine+sulfate" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "desmopressin",
+    name: "Desmopressin (DDAVP)",
+    category: "Toxicology",
+    secondaryCategories: ["Blood Thinners", "Reversal"],
+    type: "bolus",
+    concentrations: [
+      { label: "4 mcg/mL (1 mL or 10 mL vial)", mg: 0.004, mL: 1 }
+    ],
+    bolus: {
+      dose: 0.4, doseUnit: "mcg", perKg: true,
+      min: 0.3, max: 0.4, maxAbsolute: 40,
+      notes: "Antiplatelet-associated bleeding (aspirin, clopidogrel, ticagrelor) or uremic platelet dysfunction: 0.3–0.4 mcg/kg in 100 mL NS IV over 15–30 min (max 40 mcg). Onset 30 min, lasts 4–8 hr. Tachyphylaxis with repeat dosing. Watch for hyponatremia — restrict free water."
+    },
+    notes: "Releases von Willebrand factor and FVIII from endothelium. Also used for vWD type 1, mild hemophilia A. Source: UMHS Tox E-4. May follow with platelet transfusion (2 units) and TXA 1 g IV if bleeding persists.",
+    sources: [
+      { label: "FDA DDAVP Injection PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=desmopressin+injection" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "vitamin_k",
+    name: "Vitamin K (Phytonadione)",
+    category: "Toxicology",
+    secondaryCategories: ["Blood Thinners", "Reversal"],
+    type: "bolus",
+    concentrations: [
+      { label: "10 mg/mL ampule", mg: 10, mL: 1 },
+      { label: "2 mg/mL (pediatric)", mg: 2, mL: 1 },
+      { label: "10 mg / 50 mL NS IVPB", mg: 10, mL: 50 }
+    ],
+    bolus: {
+      dose: 10, doseUnit: "mg", perKg: false,
+      min: 5, max: 10, maxAbsolute: 10,
+      notes: "Warfarin reversal (life-threatening bleed): 10 mg IVPB in 50 mL NS over 30 min — MUST be given with PCC (Kcentra) or FFP for immediate effect. Vitamin K alone takes 12–24 hr. Rapid IV push → anaphylactoid reaction. Pediatric: 0.5–5 mg IV slow over 30 min."
+    },
+    notes: "Anticoagulant rodenticide (superwarfarin / brodifacoum) ingestion may require oral vitamin K 50–100 mg/day × weeks–months. Always pair life-threatening warfarin reversal with PCC or FFP — vitamin K alone is too slow.",
+    sources: [
+      { label: "FDA Vitamin K Injection PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=phytonadione" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "kcentra",
+    name: "Kcentra (4-Factor PCC)",
+    category: "Toxicology",
+    secondaryCategories: ["Blood Thinners", "Reversal"],
+    type: "bolus",
+    concentrations: [
+      { label: "500 units / 20 mL reconstituted (25 units/mL) — dose by units", mg: 25, mL: 1, isUnits: true, unitsLabel: "units" }
+    ],
+    bolus: {
+      dose: 25, doseUnit: "units", perKg: true,
+      min: 15, max: 50, maxAbsolute: 5000,
+      notes: "Warfarin reversal: INR 1.4–1.9 → 15 units/kg (max 1500); INR 2.0–3.9 → 25 units/kg (max 2500); INR 4.0–6.0 → 35 units/kg (max 3500); INR >6.0 → 50 units/kg (max 5000). Round to nearest whole vial (500 unit vials). Admin rate ≤7.2 mL/kg/hr (≈3 units/kg/min, max 500 mL/hr). Co-administer vitamin K 10 mg IV. Also: 50 units/kg (max 5000) for dabigatran (if Praxbind unavailable) or rivaroxaban/apixaban non-ICH bleed (UMHS Tox E-4)."
+    },
+    notes: "4-factor PCC contains factors II, VII, IX, X plus proteins C and S. Thrombosis risk — particularly history of HIT (heparin component). Contains heparin — avoid in HIT. Reconstitute and use within 4 hr. FFP 10–20 mL/kg is alternative if PCC unavailable.",
+    sources: [
+      { label: "FDA Kcentra PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=kcentra" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "aminocaproic",
+    name: "Aminocaproic Acid (Amicar)",
+    category: "Toxicology",
+    secondaryCategories: ["Blood Thinners"],
+    type: "bolus",
+    concentrations: [
+      { label: "250 mg/mL vial", mg: 250, mL: 1 },
+      { label: "5 g / 250 mL NS (20 mg/mL)", mg: 5000, mL: 250 }
+    ],
+    bolus: {
+      dose: 5000, doseUnit: "mg", perKg: false,
+      min: 4000, max: 5000, maxAbsolute: 5000,
+      notes: "Thrombolytic-associated bleeding reversal: 5 g in 250 mL NS IV over 20–60 min (≤1 g/min to avoid hypotension). Alternative to TXA 1 g IV. Then 1 g/hr × 8 hr or until bleeding controlled (UMHS Tox E-4)."
+    },
+    notes: "Antifibrinolytic — lysine analog that inhibits plasminogen activation. Indications: thrombolytic reversal (tPA, TNK), hyperfibrinolysis, post-cardiac surgery bleeding. Avoid with active intravascular clotting / DIC.",
+    sources: [
+      { label: "FDA Amicar (aminocaproic acid) PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=aminocaproic+acid" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "phenobarbital",
+    name: "Phenobarbital",
+    category: "Anticonvulsants",
+    secondaryCategories: ["Toxicology"],
+    type: "bolus",
+    concentrations: [
+      { label: "65 mg/mL ampule", mg: 65, mL: 1 },
+      { label: "130 mg/mL ampule", mg: 130, mL: 1 }
+    ],
+    bolus: {
+      dose: 15, doseUnit: "mg", perKg: true,
+      min: 10, max: 20, maxAbsolute: 1500,
+      notes: "Status epilepticus / TCA-induced seizures: 10–20 mg/kg IV load at ≤60 mg/min (≤2 mg/kg/min in peds <60 kg). Onset 5–15 min, half-life 80–120 hr. May repeat 5 mg/kg q15–30 min to total 30 mg/kg (UMHS Tox E-4). Adjunct for refractory TCA, sympathomimetic, withdrawal seizures."
+    },
+    notes: "Long-acting barbiturate — expect respiratory depression and hypotension at high loading doses. Have airway equipment ready. Cytochrome P450 inducer — affects warfarin, phenytoin, OCPs.",
+    sources: [
+      { label: "FDA Phenobarbital Injection PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=phenobarbital+injection" },
+      UMHS_TOX_SRC
+    ]
+  },
+  {
+    id: "ascorbic_acid",
+    name: "Ascorbic Acid (Vitamin C)",
+    category: "Toxicology",
+    type: "bolus",
+    concentrations: [
+      { label: "500 mg/mL (50 mL vial)", mg: 500, mL: 1 },
+      { label: "1 g / 100 mL NS (10 mg/mL)", mg: 1000, mL: 100 }
+    ],
+    bolus: {
+      dose: 2000, doseUnit: "mg", perKg: false,
+      min: 2000, max: 10000, maxAbsolute: 10000,
+      notes: "Methemoglobinemia (esp. G6PD-deficient patients or those on serotonergic meds, where methylene blue is contraindicated/risky): 2–10 g IV over 15–30 min. May repeat. Adjunct or alternative to methylene blue."
+    },
+    notes: "First-line alternative to methylene blue when G6PD deficient or concurrent serotonergic drugs. Slower onset than MB. Source: UMHS Tox E-4. Large IV doses → osmotic diuresis, possible calcium oxalate stones in CKD; monitor renal function.",
+    sources: [
+      { label: "FDA Ascorbic Acid Injection PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=ascorbic+acid+injection" },
+      UMHS_TOX_SRC
+    ],
+    populations: {
+      pediatric: {
+        bolus: {
+          dose: 30, doseUnit: "mg", perKg: true,
+          min: 30, max: 50, maxAbsolute: 2000,
+          notes: "Pediatric/neonatal methemoglobinemia: 100–500 mg IV initially (small infants), 30–50 mg/kg IV in older children. Preferred over methylene blue in neonates and G6PD deficient patients."
+        }
       }
     }
   },
