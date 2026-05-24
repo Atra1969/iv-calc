@@ -687,6 +687,117 @@ console.log(`\n=== Pass 7: THAM base-excess formula ===`);
   }
 }
 
+// =================================================================
+// CASE 8: BE input string parser (parseBeInput in app.js).
+// Mirror of the helper that lets type=text + inputmode=decimal accept
+// intermediate states like '-' or '-.' without wiping the field. Tests the
+// classification (empty / partial / invalid / ok) the UI relies on.
+// =================================================================
+function parseBeInputT(raw) {
+  if (raw == null) return { state: "empty" };
+  const s = String(raw).trim();
+  if (s === "") return { state: "empty" };
+  if (/^[+-]?$/.test(s)) return { state: "partial" };
+  if (/^[+-]?\.$/.test(s)) return { state: "partial" };
+  if (/^[+-]?\d+\.$/.test(s)) return { state: "partial" };
+  if (/^[+-]?\.\d+$/.test(s) || /^[+-]?\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (isFinite(n)) return { state: "ok", value: n };
+  }
+  return { state: "invalid" };
+}
+console.log(`\n=== Pass 8: BE input string parser (intermediate states) ===`);
+{
+  const PARSE_CASES = [
+    // empty / nullish
+    { raw: "",      state: "empty" },
+    { raw: "   ",   state: "empty" },
+    { raw: null,    state: "empty" },
+    { raw: undefined, state: "empty" },
+    // partial intermediate strings the user types on the way to a number
+    { raw: "-",     state: "partial" },
+    { raw: "+",     state: "partial" },
+    { raw: ".",     state: "partial" },
+    { raw: "-.",    state: "partial" },
+    { raw: "-0.",   state: "partial" },
+    { raw: "10.",   state: "partial" },
+    // well-formed negatives — the core bug-fix case
+    { raw: "-10",   state: "ok", value: -10 },
+    { raw: "-10.5", state: "ok", value: -10.5 },
+    { raw: "-.5",   state: "ok", value: -0.5 },
+    { raw: "-0.5",  state: "ok", value: -0.5 },
+    // positives + zero
+    { raw: "0",     state: "ok", value: 0 },
+    { raw: "4",     state: "ok", value: 4 },
+    { raw: "+4",    state: "ok", value: 4 },
+    { raw: "12.5",  state: "ok", value: 12.5 },
+    // junk
+    { raw: "abc",   state: "invalid" },
+    { raw: "--5",   state: "invalid" },
+    { raw: "5-",    state: "invalid" },
+    { raw: "1.2.3", state: "invalid" },
+    { raw: "e5",    state: "invalid" },
+  ];
+  for (const c of PARSE_CASES) {
+    const got = parseBeInputT(c.raw);
+    if (got.state !== c.state) {
+      fail++; failures.push(`parseBeInput(${JSON.stringify(c.raw)}) state expected ${c.state}, got ${got.state}`);
+      continue;
+    }
+    if (c.state === "ok") {
+      expect(`parseBeInput(${JSON.stringify(c.raw)}) value`, got.value, c.value, 1e-12);
+    } else {
+      pass++;
+    }
+  }
+}
+
+// =================================================================
+// CASE 9: THAM helper end-to-end — string input → parser → formula → dose.
+// Verifies the user-reported case (-10 BE at 70 kg → 770 mL) drives the
+// expected engine dose, and that intermediate strings do not error out.
+// =================================================================
+console.log(`\n=== Pass 9: THAM end-to-end (string input → engine) ===`);
+{
+  const tham = findMed("tham");
+  if (tham && tham.beFormula) {
+    const factor = tham.beFormula.factor;
+    // The user's specific reported scenario.
+    const parsed = parseBeInputT("-10");
+    if (parsed.state !== "ok") {
+      fail++; failures.push(`'-10' should parse to ok`);
+    } else {
+      const r = calcBeFormulaT(parsed.value, 70, factor);
+      expect("end-to-end BE='-10' 70kg total mL", r.totalMl, 770, 1e-9);
+      const med = resolvePopulation(tham, "adult");
+      const engine = calcDose(med, "bolus", 0, 70, r.dosePerKg);
+      expect("end-to-end BE='-10' engine mL", engine.mL, 770, 1e-9);
+    }
+    // Intermediate '-' must be partial (no error, no value).
+    const p2 = parseBeInputT("-");
+    if (p2.state === "partial") pass++;
+    else { fail++; failures.push(`'-' should be partial`); }
+    // BE='+4' alkalosis path through parser.
+    const p3 = parseBeInputT("+4");
+    if (p3.state === "ok" && p3.value === 4) {
+      const r3 = calcBeFormulaT(p3.value, 70, factor);
+      if (r3.warn === "alkalosis" && r3.dosePerKg === 0) pass++;
+      else { fail++; failures.push(`'+4' should warn alkalosis`); }
+    } else {
+      fail++; failures.push(`'+4' should parse ok, got ${JSON.stringify(p3)}`);
+    }
+    // BE='-50' implausible path.
+    const p4 = parseBeInputT("-50");
+    if (p4.state === "ok") {
+      const r4 = calcBeFormulaT(p4.value, 70, factor);
+      if (r4.error === "implausible_be") pass++;
+      else { fail++; failures.push(`'-50' should error implausible_be`); }
+    } else {
+      fail++; failures.push(`'-50' should parse ok`);
+    }
+  }
+}
+
 // ---- Summary ----
 console.log(`\n=== RESULTS ===`);
 console.log(`Property test runs: ${propRuns}`);

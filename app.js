@@ -2475,8 +2475,28 @@
     return { dosePerKg, totalMl, deficit, beMeqL, warn, needsWeight };
   }
 
+  // Parse a raw BE input string. Returns { state: 'empty' | 'partial' | 'invalid' | 'ok',
+  // value? }. Intermediate states ('-', '-.', '-0.', '.', '+') are 'partial' so the
+  // UI shows the friendly empty prompt without wiping the field. type=text +
+  // inputmode=decimal preserves these intermediate strings; a plain Number()
+  // would yield NaN and a type=number input would silently drop them.
+  function parseBeInput(raw) {
+    if (raw == null) return { state: "empty" };
+    const s = String(raw).trim();
+    if (s === "") return { state: "empty" };
+    // Intermediate states the user can type on their way to a real number.
+    if (/^[+-]?$/.test(s)) return { state: "partial" };
+    if (/^[+-]?\.$/.test(s)) return { state: "partial" };
+    if (/^[+-]?\d+\.$/.test(s)) return { state: "partial" };
+    if (/^[+-]?\.\d+$/.test(s) || /^[+-]?\d+(\.\d+)?$/.test(s)) {
+      const n = Number(s);
+      if (isFinite(n)) return { state: "ok", value: n };
+    }
+    return { state: "invalid" };
+  }
+
   // Expose pure helpers for tests in the browser console.
-  window.IVCalc = { calcDose: calculateDose, solveDoseFromVolume: solveDoseFromVolumePure, calcBeFormula, unitFactor, MASS_TO_G, DEFAULT_MEDS, resolvePopulation };
+  window.IVCalc = { calcDose: calculateDose, solveDoseFromVolume: solveDoseFromVolumePure, calcBeFormula, parseBeInput, unitFactor, MASS_TO_G, DEFAULT_MEDS, resolvePopulation };
 
   function renderResult() {
     const r = compute();
@@ -2545,6 +2565,73 @@
   // result so the existing concentration×dose output is preserved verbatim.
   // The "Apply to dose" button writes the per-kg result into #calc-dose, which
   // triggers the normal calc pipeline so all downstream rows update naturally.
+  // Build the inner result block HTML for the current beInputState + med.
+  // Pure-ish: depends on state.weightKg + beInputState.value. Returned HTML is
+  // written into #calc-be-result without touching the input element, so the
+  // input keeps focus / caret / intermediate strings like '-' or '-.'.
+  function buildBeResultHtml(med, factor, factorUnit) {
+    const raw = beInputState.value;
+    const parsed = parseBeInput(raw);
+    if (parsed.state === "empty" || parsed.state === "partial") {
+      return `<div class="be-empty">Enter base excess to compute dose.</div>`;
+    }
+    if (parsed.state === "invalid") {
+      return `<div class="be-flag warn">Enter a number, e.g. -12.</div>`;
+    }
+    const beVal = parsed.value;
+    const r = calcBeFormula(beVal, state.weightKg, factor);
+    if (r.error === "implausible_be") {
+      return `<div class="be-flag danger">⚠ Implausible base excess (|BE| > 40 mEq/L) — re-check ABG.</div>`;
+    }
+    const flags = [];
+    if (r.warn === "alkalosis") {
+      flags.push(`<div class="be-flag danger">⚠ Positive BE (${fmt(beVal,1)}) suggests alkalosis — THAM is not indicated.</div>`);
+    } else if (r.warn === "no_deficit") {
+      flags.push(`<div class="be-flag warn">No base deficit at BE = 0 — no dose computed.</div>`);
+    }
+    const rows = [];
+    rows.push(`<div class="be-row"><span class="label">Base deficit</span><span class="val">${fmt(r.deficit, 1)} mEq/L</span></div>`);
+    rows.push(`<div class="be-row"><span class="label">Per-kg dose</span><span class="val">${fmt(r.dosePerKg, 3)} ${factorUnit}/kg</span></div>`);
+    if (r.needsWeight) {
+      rows.push(`<div class="be-row be-need-weight"><span class="label">Total volume</span><span class="val">Enter weight to compute</span></div>`);
+    } else {
+      rows.push(`<div class="be-row"><span class="label">Total volume</span><span class="val">${fmt(r.totalMl, 1)} ${factorUnit}</span></div>`);
+      if (med.bolus && med.bolus.max != null && r.dosePerKg > med.bolus.max) {
+        flags.push(`<div class="be-flag warn">⚠ Per-kg dose ${fmt(r.dosePerKg,2)} ${factorUnit}/kg exceeds typical max ${fmt(med.bolus.max,2)} ${factorUnit}/kg.</div>`);
+      }
+      if (med.bolus && med.bolus.maxAbsolute != null && r.totalMl > med.bolus.maxAbsolute) {
+        flags.push(`<div class="be-flag danger">⚠ Total ${fmt(r.totalMl,0)} ${factorUnit} exceeds adult hard cap ${fmt(med.bolus.maxAbsolute,0)} ${factorUnit}.</div>`);
+      }
+    }
+    const canApply = !r.warn && r.dosePerKg > 0;
+    const applyBtn = `<button type="button" id="calc-be-apply" class="btn-ghost small be-apply"${canApply ? "" : " disabled"} aria-label="Apply formula dose to calculator">Apply to dose</button>`;
+    return rows.join("") + flags.join("") +
+      `<div class="be-actions">${applyBtn}<span class="be-formula-note">= weight × |BE| × ${fmt(factor,2)}</span></div>`;
+  }
+
+  // Refresh only the result subtree and re-wire the Apply button. Leaves the
+  // input element alone so the user's intermediate text (including a lone '-')
+  // is never clobbered by a re-render.
+  function refreshBeResult(med, factor, factorUnit) {
+    if (!calcBePanel) return;
+    const resultEl = $("#calc-be-result", calcBePanel);
+    if (!resultEl) return;
+    resultEl.innerHTML = buildBeResultHtml(med, factor, factorUnit);
+    const applyBtn = $("#calc-be-apply", calcBePanel);
+    if (applyBtn && !applyBtn.disabled) {
+      applyBtn.addEventListener("click", () => {
+        const parsed = parseBeInput(beInputState.value);
+        if (parsed.state !== "ok") return;
+        const r2 = calcBeFormula(parsed.value, state.weightKg, factor);
+        if (r2.error || !(r2.dosePerKg > 0)) return;
+        const rounded = Number(r2.dosePerKg.toFixed(3));
+        calcDose.value = rounded;
+        calcDose.dispatchEvent(new Event("input", { bubbles: true }));
+        calcDose.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
+  }
+
   function renderBeFormulaPanel(med) {
     if (!calcBePanel) return;
     const f = med && med.beFormula;
@@ -2561,42 +2648,14 @@
     const factor = Number(f.factor);
     const factorUnit = f.factorUnit || (med.bolus && med.bolus.doseUnit) || "mL";
     const raw = beInputState.value;
-    const beVal = raw === "" ? NaN : Number(raw);
-    const r = calcBeFormula(beVal, state.weightKg, factor);
 
-    let resultBlock = "";
-    if (raw === "" || !isFinite(beVal)) {
-      resultBlock = `<div class="be-empty">Enter base excess to compute dose.</div>`;
-    } else if (r.error === "implausible_be") {
-      resultBlock = `<div class="be-flag danger">⚠ Implausible base excess (|BE| > 40 mEq/L) — re-check ABG.</div>`;
-    } else {
-      const flags = [];
-      if (r.warn === "alkalosis") {
-        flags.push(`<div class="be-flag danger">⚠ Positive BE (${fmt(beVal,1)}) suggests alkalosis — THAM is not indicated.</div>`);
-      } else if (r.warn === "no_deficit") {
-        flags.push(`<div class="be-flag warn">No base deficit at BE = 0 — no dose computed.</div>`);
-      }
-      const rows = [];
-      rows.push(`<div class="be-row"><span class="label">Base deficit</span><span class="val">${fmt(r.deficit, 1)} mEq/L</span></div>`);
-      rows.push(`<div class="be-row"><span class="label">Per-kg dose</span><span class="val">${fmt(r.dosePerKg, 3)} ${factorUnit}/kg</span></div>`);
-      if (r.needsWeight) {
-        rows.push(`<div class="be-row be-need-weight"><span class="label">Total volume</span><span class="val">Enter weight to compute</span></div>`);
-      } else {
-        rows.push(`<div class="be-row"><span class="label">Total volume</span><span class="val">${fmt(r.totalMl, 1)} ${factorUnit}</span></div>`);
-        // Soft warn if computed dose exceeds the med's per-kg max.
-        if (med.bolus && med.bolus.max != null && r.dosePerKg > med.bolus.max) {
-          flags.push(`<div class="be-flag warn">⚠ Per-kg dose ${fmt(r.dosePerKg,2)} ${factorUnit}/kg exceeds typical max ${fmt(med.bolus.max,2)} ${factorUnit}/kg.</div>`);
-        }
-        if (med.bolus && med.bolus.maxAbsolute != null && r.totalMl > med.bolus.maxAbsolute) {
-          flags.push(`<div class="be-flag danger">⚠ Total ${fmt(r.totalMl,0)} ${factorUnit} exceeds adult hard cap ${fmt(med.bolus.maxAbsolute,0)} ${factorUnit}.</div>`);
-        }
-      }
-      const canApply = !r.warn && r.dosePerKg > 0;
-      const applyBtn = `<button type="button" id="calc-be-apply" class="btn-ghost small be-apply"${canApply ? "" : " disabled"} aria-label="Apply formula dose to calculator">Apply to dose</button>`;
-      resultBlock = rows.join("") + flags.join("") +
-        `<div class="be-actions">${applyBtn}<span class="be-formula-note">= weight × |BE| × ${fmt(factor,2)}</span></div>`;
-    }
-
+    // Use type=text + inputmode=decimal so iOS/Safari and mobile keyboards
+    // (a) show a minus key on iPad/iPhone keypads and (b) preserve intermediate
+    // strings like '-', '-.', '-0.' that a type=number input would silently
+    // wipe via HTML5 sanitization. pattern keeps form-level validation honest
+    // while still letting JS handle parsing. The input is rendered ONCE per
+    // med-switch; subsequent keystrokes patch only the result block below it,
+    // so the field keeps focus and caret.
     calcBePanel.innerHTML = `
       <div class="be-head">
         <span class="be-title">${escapeHtml(f.label || "Base-excess formula")}</span>
@@ -2604,39 +2663,25 @@
       </div>
       <div class="be-input-row">
         <label for="calc-be-input">Base excess</label>
-        <input id="calc-be-input" type="number" inputmode="decimal" step="0.1" min="-40" max="40"
-               value="${escapeAttr(raw)}" placeholder="mEq/L (e.g. -12)" aria-describedby="calc-be-help" />
+        <input id="calc-be-input" type="text" inputmode="decimal"
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+               pattern="^[+-]?(\\d+(\\.\\d*)?|\\.\\d+)$"
+               value="${escapeAttr(raw)}" placeholder="mEq/L (e.g. -12)"
+               aria-label="Base excess in milliequivalents per liter"
+               aria-describedby="calc-be-help" />
         <span class="be-units">mEq/L</span>
       </div>
       <p id="calc-be-help" class="be-help">Negative BE = base deficit. Positive BE indicates alkalosis (formula not indicated).</p>
-      <div class="be-result">${resultBlock}</div>
+      <div id="calc-be-result" class="be-result"></div>
     `;
+
+    refreshBeResult(med, factor, factorUnit);
 
     const input = $("#calc-be-input", calcBePanel);
     if (input) {
       input.addEventListener("input", () => {
         beInputState.value = input.value;
-        // Re-render the panel; focus is preserved by selectionStart save/restore.
-        const sel = input.selectionStart;
-        renderBeFormulaPanel(med);
-        const fresh = $("#calc-be-input", calcBePanel);
-        if (fresh) {
-          fresh.focus();
-          try { fresh.setSelectionRange(sel, sel); } catch (e) { /* no-op for number inputs in some browsers */ }
-        }
-      });
-    }
-    const applyBtn = $("#calc-be-apply", calcBePanel);
-    if (applyBtn && !applyBtn.disabled) {
-      applyBtn.addEventListener("click", () => {
-        const r2 = calcBeFormula(Number(beInputState.value), state.weightKg, factor);
-        if (r2.error || !(r2.dosePerKg > 0)) return;
-        // Round to a clinically sensible precision; the input listener on
-        // #calc-dose updates state.dose and re-renders the standard output.
-        const rounded = Number(r2.dosePerKg.toFixed(3));
-        calcDose.value = rounded;
-        calcDose.dispatchEvent(new Event("input", { bubbles: true }));
-        calcDose.dispatchEvent(new Event("change", { bubbles: true }));
+        refreshBeResult(med, factor, factorUnit);
       });
     }
   }
