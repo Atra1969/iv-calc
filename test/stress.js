@@ -659,6 +659,16 @@ console.log(`\n=== Pass 7: THAM base-excess formula ===`);
     const r2 = calcBeFormulaT(-5, 80, factor);
     expect("THAM BE=-5 80kg per-kg", r2.dosePerKg, 5.5, 1e-9);
     expect("THAM BE=-5 80kg total",  r2.totalMl,   440, 1e-9);
+    // UMHS ARDS Appendix B-1, Fig. 6 worked example: 90 kg with base deficit
+    // 5 mEq/L → 90 × 5 × 1.1 = 495 mL.
+    const rArds = calcBeFormulaT(-5, 90, factor);
+    expect("THAM ARDS B-1 example BE=-5 90kg per-kg", rArds.dosePerKg, 5.5, 1e-9);
+    expect("THAM ARDS B-1 example BE=-5 90kg total",  rArds.totalMl,   495, 1e-9);
+    // Same example via engine: applying per-kg dose 5.5 to 90 kg via the
+    // standard concentration×dose path must also yield 495 mL.
+    const medArds = resolvePopulation(tham, "adult");
+    const rArdsEngine = calcDose(medArds, "bolus", 0, 90, rArds.dosePerKg);
+    expect("THAM ARDS B-1 example engine mL", rArdsEngine.mL, 495, 1e-9);
     // Positive BE (alkalosis) — must compute zero deficit and warn.
     const r3 = calcBeFormulaT(4, 70, factor);
     if (r3.warn === "alkalosis" && r3.dosePerKg === 0) pass++;

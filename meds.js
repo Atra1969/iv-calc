@@ -29,6 +29,7 @@ const UMHS_ADULT_SRC = { label: "UMHS Adult ICU Continuous Infusion Guidelines (
 const UMHS_PEDS_SRC  = { label: "UMHS PICU Continuous Infusion Guidelines (2023)", url: "refs/umhs-picu-2023.pdf" };
 const UMHS_NICU_SRC  = { label: "UMHS Brandon NICU IV Medication Guidelines (2023)", url: "refs/umhs-nicu-2023.pdf" };
 const UMHS_MCHC_SRC  = { label: "UMHS Michigan Congenital Heart Center IV Guidelines (2021)", url: "refs/umhs-mchc-2021.pdf" };
+const UMHS_ARDS_SRC  = { label: "UMHS ARDS Management Guideline — Appendix B-1 (THAM 0.3 M, Figure 6)", url: "refs/umhs-ards-b1-2024.pdf" };
 
 const DEFAULT_MEDS = [
   // ---------------- PRESSORS ----------------
@@ -1869,7 +1870,7 @@ const DEFAULT_MEDS = [
     bolus: {
       dose: 1.1, doseUnit: "mL of 0.3 M", perKg: true,
       min: 1.1, max: 5.5, maxAbsolute: 1000,
-      notes: "Metabolic acidosis: mL of 0.3 M = weight (kg) × base deficit (mEq/L) × 1.1. Cardiac arrest closed-chest: 111–333 mL (3.6–10.8 g) of 0.3 M IV. Adult max single dose 500 mL; severe cases up to 1000 mL. Avoid in anuria/uremia, infants <1 mo. Extravasation causes tissue necrosis — central line preferred."
+      notes: "UMHS ARDS Appendix B-1, Fig. 6 (THAM 0.3 M): required mL per dose = actual body weight (kg) × base deficit (mEq/L) × 1.1. Example: 90 kg patient with base deficit 5 mEq/L → 90 × 5 × 1.1 = 495 mL. Avoid rapid administration; when feasible infuse over 1 hour. Use the largest IV / central line preferred (extravasation causes tissue necrosis). Monitor for fluid overload, blood glucose, pH, and hyperkalemia. Avoid in anuria/uremia, infants < 1 mo."
     },
     // Optional base-excess–driven formula helper. When present, the bolus
     // calculator surfaces a small panel that converts a measured arterial BE
@@ -1881,13 +1882,15 @@ const DEFAULT_MEDS = [
     beFormula: {
       factor: 1.1,
       factorUnit: "mL of 0.3 M",
-      label: "Acidosis formula",
-      help: "Per FDA PI: mL of 0.3 M THAM = weight (kg) × base deficit (mEq/L) × 1.1. Enter the patient's arterial base excess (mEq/L); base deficit is taken as the absolute value of a negative BE."
+      label: "ARDS guideline formula (THAM 0.3 M)",
+      formula: "Required mL per dose = actual body weight (kg) × base deficit (mEq/L) × 1.1",
+      example: "90 kg with base deficit 5 mEq/L → 90 × 5 × 1.1 = 495 mL",
+      help: "UMHS ARDS Appendix B-1, Fig. 6: Required mL per dose = actual body weight (kg) × base deficit (mEq/L) × 1.1. Enter the patient's arterial base excess (mEq/L); base deficit is the absolute value of a negative BE."
     },
     sources: [
+      UMHS_ARDS_SRC,
       { label: "FDA THAM (tromethamine) PI — Pfizer", url: "https://labeling.pfizer.com/ShowLabeling.aspx?id=4642" },
-      { label: "Medscape THAM Dosing Reference", url: "https://reference.medscape.com/drug/tham-tromethamine-342884" },
-      { label: "WikEM Tromethamine", url: "https://www.wikem.org/wiki/Tromethamine" }
+      { label: "Medscape THAM Dosing Reference", url: "https://reference.medscape.com/drug/tham-tromethamine-342884" }
     ]
   },
 

@@ -2591,11 +2591,12 @@
     }
     const rows = [];
     rows.push(`<div class="be-row"><span class="label">Base deficit</span><span class="val">${fmt(r.deficit, 1)} mEq/L</span></div>`);
-    rows.push(`<div class="be-row"><span class="label">Per-kg dose</span><span class="val">${fmt(r.dosePerKg, 3)} ${factorUnit}/kg</span></div>`);
     if (r.needsWeight) {
-      rows.push(`<div class="be-row be-need-weight"><span class="label">Total volume</span><span class="val">Enter weight to compute</span></div>`);
+      rows.push(`<div class="be-row be-need-weight be-primary"><span class="label">Required mL per dose</span><span class="val">Enter weight to compute</span></div>`);
+      rows.push(`<div class="be-row"><span class="label">Per-kg helper</span><span class="val">${fmt(r.dosePerKg, 3)} ${factorUnit}/kg</span></div>`);
     } else {
-      rows.push(`<div class="be-row"><span class="label">Total volume</span><span class="val">${fmt(r.totalMl, 1)} ${factorUnit}</span></div>`);
+      rows.push(`<div class="be-row be-primary"><span class="label">Required mL per dose</span><span class="val">${fmt(r.totalMl, 1)} ${factorUnit}</span></div>`);
+      rows.push(`<div class="be-row"><span class="label">Per-kg helper</span><span class="val">${fmt(r.dosePerKg, 3)} ${factorUnit}/kg</span></div>`);
       if (med.bolus && med.bolus.max != null && r.dosePerKg > med.bolus.max) {
         flags.push(`<div class="be-flag warn">⚠ Per-kg dose ${fmt(r.dosePerKg,2)} ${factorUnit}/kg exceeds typical max ${fmt(med.bolus.max,2)} ${factorUnit}/kg.</div>`);
       }
@@ -2606,7 +2607,7 @@
     const canApply = !r.warn && r.dosePerKg > 0;
     const applyBtn = `<button type="button" id="calc-be-apply" class="btn-ghost small be-apply"${canApply ? "" : " disabled"} aria-label="Apply formula dose to calculator">Apply to dose</button>`;
     return rows.join("") + flags.join("") +
-      `<div class="be-actions">${applyBtn}<span class="be-formula-note">= weight × |BE| × ${fmt(factor,2)}</span></div>`;
+      `<div class="be-actions">${applyBtn}<span class="be-formula-note">= actual body weight (kg) × base deficit (mEq/L) × ${fmt(factor,2)}</span></div>`;
   }
 
   // Refresh only the result subtree and re-wire the Apply button. Leaves the
@@ -2656,9 +2657,13 @@
     // while still letting JS handle parsing. The input is rendered ONCE per
     // med-switch; subsequent keystrokes patch only the result block below it,
     // so the field keeps focus and caret.
+    const formulaLine = f.formula ? `<span class="be-formula-line">${escapeHtml(f.formula)}</span>` : "";
+    const exampleLine = f.example ? `<span class="be-formula-example">e.g. ${escapeHtml(f.example)}</span>` : "";
     calcBePanel.innerHTML = `
       <div class="be-head">
         <span class="be-title">${escapeHtml(f.label || "Base-excess formula")}</span>
+        ${formulaLine}
+        ${exampleLine}
         <span class="be-sub">${escapeHtml(f.help || "")}</span>
       </div>
       <div class="be-input-row">
