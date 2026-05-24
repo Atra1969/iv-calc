@@ -88,6 +88,24 @@
         changed = true;
       }
     });
+    // 2026-05-24a: Reshape the fluids/maintenance taxonomy.
+    //   - Old `maintenance_mlkg` lived in category "Maintenance" and was named
+    //     "Maintenance Fluid" — but it's actually a BOLUS calc (5/10/20 mL/kg).
+    //     Rename to "IVF Bolus" and move to category "IVF Bolus".
+    //   - Old `hypertonic_saline_3` lived in category "Fluids" — fold into "Other".
+    //   - Seed new `maintenance_421` (true Holliday-Segar maintenance rate) into
+    //     category "Maintenance" so the renamed Maintenance tab has real content.
+    const mlkg = lib.find(m => m && m.id === "maintenance_mlkg");
+    if (mlkg) {
+      if (mlkg.category !== "IVF Bolus") { mlkg.category = "IVF Bolus"; changed = true; }
+      if (mlkg.name !== "IVF Bolus")     { mlkg.name = "IVF Bolus";     changed = true; }
+    }
+    const hs3 = lib.find(m => m && m.id === "hypertonic_saline_3");
+    if (hs3 && hs3.category === "Fluids") { hs3.category = "Other"; changed = true; }
+    if (!lib.some(m => m && m.id === "maintenance_421")) {
+      const def421 = hasDefault ? DEFAULT_MEDS.find(m => m && m.id === "maintenance_421") : null;
+      if (def421) { lib.push(JSON.parse(JSON.stringify(def421))); changed = true; }
+    }
     if (changed) {
       try { storage.setItem(STORAGE_KEY, JSON.stringify(lib)); } catch (e) {}
     }
@@ -1109,6 +1127,9 @@
     if (med.customCalc === "maintenance_mlkg") {
       paintMaintenance(med, result);
       if (notes) notes.textContent = med.notes || "";
+    } else if (med.customCalc === "maintenance_421") {
+      paintMaintenance421(med, result);
+      if (notes) notes.textContent = med.notes || "";
     } else if (med.customCalc === "defibrillation" || med.customCalc === "cardioversion") {
       paintElectricalTherapy(med, result);
       if (notes) notes.textContent = med.notes || "";
@@ -1391,6 +1412,108 @@
         </div>
         <div class="maintenance-disclaimer">
           Isotonic crystalloid (NS or LR). Reassess hemodynamics and lung exam after each bolus; titrate to perfusion endpoints rather than fixed totals.
+        </div>
+      </div>`;
+  }
+
+  // -------- Holliday-Segar 4-2-1 maintenance fluid rate --------
+  // Continuous (hourly) maintenance rate for ongoing fluid needs — NOT a bolus.
+  // 4 mL/kg/hr first 10 kg, +2 mL/kg/hr next 10 kg, +1 mL/kg/hr each kg > 20.
+  // Daily total ≈ 100 mL/kg first 10 kg, +50 mL/kg next 10, +20 mL/kg above 20.
+  function paintMaintenance421(med, resultEl) {
+    const focusKg = state.weightKg;
+    resultEl.innerHTML = renderMaintenance421(focusKg);
+    const innerWeight = document.getElementById("maintenance-weight");
+    if (!innerWeight) return;
+    innerWeight.addEventListener("input", () => {
+      const raw = innerWeight.value;
+      const v = parseFloat(raw);
+      const kg = (isNaN(v) || v <= 0) ? null : v;
+      state.weightKg = kg;
+      const mainInput = document.getElementById("weight");
+      if (mainInput) {
+        if (kg === null) mainInput.value = "";
+        else mainInput.value = state.unit === "kg" ? String(v) : (kg * 2.20462).toFixed(1);
+      }
+      if (!state.populationManual) {
+        const suggestion = suggestedPopulationFromWeight(kg) || "adult";
+        if (suggestion !== state.population) applyPopulation(suggestion, false);
+        else syncPopulationVisual();
+      }
+      saveState();
+      updateWeightDerived();
+      renderGrid();
+      const caret = innerWeight.selectionStart;
+      paintMaintenance421(med, resultEl);
+      const refocus = document.getElementById("maintenance-weight");
+      if (refocus) {
+        refocus.focus();
+        try { refocus.setSelectionRange(caret, caret); } catch (_) {}
+      }
+    });
+  }
+
+  function calcMaintenance421(weightKg) {
+    if (!weightKg || weightKg <= 0) return null;
+    let ratePerHr = 0;
+    let dailyMl = 0;
+    const w = weightKg;
+    if (w <= 10) {
+      ratePerHr = w * 4;
+      dailyMl   = w * 100;
+    } else if (w <= 20) {
+      ratePerHr = 40 + (w - 10) * 2;
+      dailyMl   = 1000 + (w - 10) * 50;
+    } else {
+      ratePerHr = 60 + (w - 20) * 1;
+      dailyMl   = 1500 + (w - 20) * 20;
+    }
+    return { ratePerHr, dailyMl };
+  }
+
+  function renderMaintenance421(weightKg) {
+    const r = calcMaintenance421(weightKg);
+    const weightInput = `
+      <div class="maintenance-weight-row">
+        <label for="maintenance-weight" class="maintenance-weight-label">Patient weight</label>
+        <div class="maintenance-weight-input-wrap">
+          <input id="maintenance-weight" type="number" inputmode="decimal" step="0.1" min="0" placeholder="—" value="${weightKg ? fmt(weightKg, 2) : ""}" />
+          <span class="maintenance-weight-unit">kg</span>
+        </div>
+      </div>`;
+    if (!r) {
+      return `${weightInput}
+      <div class="maintenance-empty">
+        <div class="maintenance-empty-title">Enter patient weight</div>
+        <div class="maintenance-empty-sub">Holliday-Segar 4-2-1 rule: 4 mL/kg/hr first 10 kg, +2 mL/kg/hr next 10, +1 mL/kg/hr above 20.</div>
+      </div>`;
+    }
+    // Friendly tier breakdown so the user can sanity-check the math at a glance.
+    let tier;
+    if (weightKg <= 10)      tier = `4 mL/kg/hr × ${fmt(weightKg, 1)} kg`;
+    else if (weightKg <= 20) tier = `40 + 2 mL/kg/hr × ${fmt(weightKg - 10, 1)} kg over 10`;
+    else                     tier = `60 + 1 mL/kg/hr × ${fmt(weightKg - 20, 1)} kg over 20`;
+    return `${weightInput}
+      <div class="maintenance-result">
+        <div class="maintenance-headline maintenance-headline--primary">
+          <div class="maintenance-label">Maintenance rate</div>
+          <div class="maintenance-rate">${fmt(r.ratePerHr, 1)} <span class="unit">mL/hr</span></div>
+          <div class="maintenance-sub">${tier}</div>
+        </div>
+        <div class="maintenance-cards maintenance-cards--two">
+          <div class="maintenance-card">
+            <div class="maintenance-card-label">Daily total</div>
+            <div class="maintenance-card-val">${fmt(r.dailyMl, 0)} mL / 24 h</div>
+            <div class="maintenance-card-sub">100 / 50 / 20 mL/kg/day tiers</div>
+          </div>
+          <div class="maintenance-card">
+            <div class="maintenance-card-label">mL/kg/hr (avg)</div>
+            <div class="maintenance-card-val">${fmt(r.ratePerHr / weightKg, 2)} mL/kg/hr</div>
+            <div class="maintenance-card-sub">Effective hourly rate per kg</div>
+          </div>
+        </div>
+        <div class="maintenance-disclaimer">
+          Isotonic fluid preferred (D5NS, D5LR, or per local protocol) — hypotonic maintenance fluids increase hyponatremia risk in hospitalized children (AAP 2018). For deficits and ongoing losses, calculate replacement separately and add to maintenance.
         </div>
       </div>`;
   }
