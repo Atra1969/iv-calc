@@ -827,6 +827,37 @@ input[type="range"] {
   background: var(--accent); color: var(--on-maize);
   box-shadow: 0 1px 0 rgba(0,0,0,0.2);
 }
+/* ---------- VARIANT TOGGLE inside calc modal ----------
+   Some meds (e.g. Vasopressin) have multiple distinct protocols on the same
+   drug — Shock vs Diabetes Insipidus. The variant toggle lets the user swap
+   between protocols without leaving the calculator. Visually similar to the
+   mode toggle, but smaller and with a distinct top label. */
+.variant-wrap[hidden] { display: none !important; }
+.variant-wrap {
+  margin: 8px 0 12px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+.variant-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--text-dim); font-weight: 700;
+  margin-bottom: 6px;
+}
+.seg.variant-seg {
+  padding: 3px;
+}
+.seg.variant-seg button {
+  height: 34px;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+.seg.variant-seg button.active {
+  background: var(--accent);
+  color: var(--on-maize);
+}
+
 /* Helper descriptor below the bolus/infusion mode toggle so the user knows
    what each mode means at a glance. Populated by JS. */
 .seg-desc {

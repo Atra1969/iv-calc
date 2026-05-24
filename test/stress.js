@@ -172,8 +172,7 @@ const CASES = [
   { id: "ketamine", mode: "bolus", concIdx: 2, w: 80, dose: 1.5, expMl: 2.4, expTotal: 120 },
   // Ketamine drip 2500 mg / 250 mL = 10 mg/mL (UMHS 2023). 1 mg/kg/hr × 70 kg = 70 mg/hr → 7 mL/hr
   { id: "ketamine", mode: "infusion", concIdx: 0, w: 70, dose: 1, expMl: 7, expTotal: 70 },
-  // Etomidate 0.3 mg/kg × 80 kg = 24 mg @ 2 mg/mL = 12 mL
-  { id: "etomidate", mode: "bolus", concIdx: 0, w: 80, dose: 0.3, expMl: 12, expTotal: 24 },
+  // (Etomidate removed Round 6 — deleted from library per user request.)
   // Propofol induction 1.5 mg/kg × 80 = 120 mg @ 10 mg/mL = 12 mL
   { id: "propofol", mode: "bolus", concIdx: 0, w: 80, dose: 1.5, expMl: 12, expTotal: 120 },
   // Propofol drip 10 mg/mL. 30 mcg/kg/min × 80 = 2400 mcg/min = 2.4 mg/min → 0.24 mL/min → 14.4 mL/hr
@@ -209,8 +208,7 @@ const CASES = [
   // ---- Paralytics ----
   // Roc 10 mg/mL. 1.2 mg/kg × 80 = 96 mg → 9.6 mL
   { id: "rocuronium", mode: "bolus", concIdx: 0, w: 80, dose: 1.2, expMl: 9.6, expTotal: 96 },
-  // Sux 20 mg/mL. 1.5 mg/kg × 80 = 120 mg → 6 mL
-  { id: "succinylcholine", mode: "bolus", concIdx: 0, w: 80, dose: 1.5, expMl: 6, expTotal: 120 },
+  // (Succinylcholine removed Round 6 — deleted from library per user request.)
   // Vec 1 mg/mL. 0.1 × 80 = 8 mg → 8 mL
   { id: "vecuronium", mode: "bolus", concIdx: 0, w: 80, dose: 0.1, expMl: 8, expTotal: 8 },
 

@@ -41,7 +41,7 @@
   // ----------- STATE -----------
   let library = loadLibrary();
   let state = Object.assign(
-    { weightKg: null, unit: "kg", category: "All", search: "", filter: "all", sort: "natural", currentMedId: null, mode: "bolus", concIdx: 0, dose: null, population: "adult", populationManual: false },
+    { weightKg: null, unit: "kg", category: "All", search: "", filter: "all", sort: "natural", currentMedId: null, mode: "bolus", concIdx: 0, dose: null, population: "adult", populationManual: false, variant: null },
     loadState()
   );
   if (!["adult", "pediatric", "neonatal"].includes(state.population)) state.population = "adult";
@@ -68,15 +68,16 @@
   function migrateLibrary(lib) {
     let changed = false;
     const hasDefault = typeof DEFAULT_MEDS !== "undefined";
-    // 2026-05-23a: Replace old Holliday-Segar 4-2-1 entry with simple 5/10/20 mL/kg.
-    const oldIdx = lib.findIndex(m => m && m.id === "maintenance_421");
-    const maintNew = hasDefault ? DEFAULT_MEDS.find(m => m && m.id === "maintenance_mlkg") : null;
-    if (oldIdx >= 0 && maintNew) {
-      lib.splice(oldIdx, 1, JSON.parse(JSON.stringify(maintNew)));
-      changed = true;
-    } else if (oldIdx < 0 && maintNew && !lib.some(m => m && m.id === "maintenance_mlkg")) {
-      lib.push(JSON.parse(JSON.stringify(maintNew)));
-      changed = true;
+    // 2026-05-23a (SUPERSEDED by 2026-05-24a): originally replaced an old
+    // maintenance_421 with maintenance_mlkg. As of 2026-05-24a both meds coexist
+    // (IVF Bolus + Pediatric Maintenance Fluid), so this step is now a no-op
+    // beyond ensuring maintenance_mlkg exists. Kept for explicit history.
+    if (hasDefault) {
+      const maintMlkgDef = DEFAULT_MEDS.find(m => m && m.id === "maintenance_mlkg");
+      if (maintMlkgDef && !lib.some(m => m && m.id === "maintenance_mlkg")) {
+        lib.push(JSON.parse(JSON.stringify(maintMlkgDef)));
+        changed = true;
+      }
     }
     // 2026-05-23b: Seed Code-tab-only electrical therapy entries (defibrillation,
     // cardioversion). These are hidden from "All" and search via codeOnly:true.
@@ -105,6 +106,72 @@
     if (!lib.some(m => m && m.id === "maintenance_421")) {
       const def421 = hasDefault ? DEFAULT_MEDS.find(m => m && m.id === "maintenance_421") : null;
       if (def421) { lib.push(JSON.parse(JSON.stringify(def421))); changed = true; }
+    }
+    // 2026-05-24b: Major reorganization — new Respiratory + Blood Thinners
+    // categories, deletions, moves, copies (secondaryCategories), variants,
+    // bolusLabel overrides. Each step is idempotent: it only rewrites a field
+    // if it's still in the pre-migration state, so a user who's already on the
+    // latest code is unaffected.
+    const removeIds = new Set(["etomidate", "succinylcholine", "fenoldopam", "vasopressin_di"]);
+    const before = lib.length;
+    for (let i = lib.length - 1; i >= 0; i--) {
+      if (lib[i] && removeIds.has(lib[i].id)) lib.splice(i, 1);
+    }
+    if (lib.length !== before) changed = true;
+    // Category moves: only flip if the cached entry is still on the OLD value.
+    // This preserves any manual recategorization the user may have done.
+    const moveCat = (id, oldCat, newCat) => {
+      const m = lib.find(x => x && x.id === id);
+      if (m && m.category === oldCat) { m.category = newCat; changed = true; }
+    };
+    moveCat("epoprostenol",  "Pressors",        "Respiratory");
+    moveCat("pentobarbital", "Sedation",        "Anticonvulsants");
+    moveCat("atropine",      "Antiarrhythmics", "Toxicology");
+    moveCat("aminophylline", "Cardiac",         "Respiratory");
+    moveCat("aminophylline", "Other",           "Respiratory"); // alt prior location
+    moveCat("terbutaline",   "Cardiac",         "Respiratory");
+    moveCat("treprostinil",  "Cardiac",         "Respiratory");
+    moveCat("heparin",       "Other",           "Blood Thinners");
+    moveCat("argatroban",    "Cardiac",         "Blood Thinners");
+    moveCat("bivalirudin",   "Cardiac",         "Blood Thinners");
+    // Adenosine → codeOnly
+    const aden = lib.find(m => m && m.id === "adenosine");
+    if (aden && aden.category !== "_codeOnly") {
+      aden.category = "_codeOnly";
+      aden.codeOnly = true;
+      changed = true;
+    }
+    // Add bolusLabel: "Push Dose Pressor" to Epi + Phenyl if missing.
+    ["epinephrine", "phenylephrine"].forEach(id => {
+      const m = lib.find(x => x && x.id === id);
+      if (m && m.bolusLabel !== "Push Dose Pressor") {
+        m.bolusLabel = "Push Dose Pressor";
+        changed = true;
+      }
+    });
+    // Add secondaryCategories to copies.
+    const ensureSecondary = (id, cat) => {
+      const m = lib.find(x => x && x.id === id);
+      if (!m) return;
+      const arr = Array.isArray(m.secondaryCategories) ? m.secondaryCategories : [];
+      if (!arr.includes(cat)) { m.secondaryCategories = arr.concat([cat]); changed = true; }
+    };
+    ensureSecondary("methylene_blue",      "Pressors");
+    ensureSecondary("hydroxocobalamin",    "Pressors");
+    ensureSecondary("midazolam",           "Anticonvulsants");
+    ensureSecondary("hypertonic_saline_3", "Anticonvulsants");
+    // Vasopressin: fold DI into variantOverlays + add variants array.
+    const vp = lib.find(m => m && m.id === "vasopressin");
+    const defVp = hasDefault ? DEFAULT_MEDS.find(m => m && m.id === "vasopressin") : null;
+    if (vp && defVp) {
+      if (!Array.isArray(vp.variants) && defVp.variants) {
+        vp.variants = JSON.parse(JSON.stringify(defVp.variants));
+        changed = true;
+      }
+      if (!vp.variantOverrides && defVp.variantOverrides) {
+        vp.variantOverrides = JSON.parse(JSON.stringify(defVp.variantOverrides));
+        changed = true;
+      }
     }
     if (changed) {
       try { storage.setItem(STORAGE_KEY, JSON.stringify(lib)); } catch (e) {}
@@ -525,6 +592,13 @@
     // codeOnly meds use a sentinel category ("_codeOnly") that must never appear
     // as a tab — they're only reachable via the Code tab.
     const used = new Set(library.filter(m => !m.codeOnly).map(m => m.category));
+    // Surface secondaryCategories too — e.g. Methylene Blue's primary is
+    // Toxicology but it should also create a Pressors tab if needed.
+    library.forEach(m => {
+      if (m && Array.isArray(m.secondaryCategories)) {
+        m.secondaryCategories.forEach(c => { if (c) used.add(c); });
+      }
+    });
     DEFAULT_CATEGORIES.forEach(c => used.add(c));
     used.delete("_codeOnly"); // belt-and-suspenders
     const all = Array.from(used);
@@ -741,7 +815,16 @@
         // codeOnly meds (e.g. cardioversion, defibrillation) NEVER appear outside
         // the Code tab — not in "All", not in any named category, not in search.
         if (m && m.codeOnly) return false;
-        if (state.category !== "All" && m.category !== state.category) return false;
+        if (state.category !== "All") {
+          // Match either the primary category or any secondaryCategories entry.
+          // This lets one med appear in multiple tabs (e.g. Methylene Blue lives
+          // primarily in Toxicology but also surfaces under Pressors as a
+          // rescue-pressor option).
+          if (m.category === state.category) return true;
+          const sec = Array.isArray(m.secondaryCategories) ? m.secondaryCategories : [];
+          if (sec.includes(state.category)) return true;
+          return false;
+        }
         return true;
       });
       // Apply user's per-category med order if set.
@@ -967,6 +1050,9 @@
   const calcName = $("#calc-name");
   const calcCat = $("#calc-cat");
   const calcModeSeg = $("#calc-mode-seg");
+  // Variant toggle (e.g. Vasopressin Shock vs DI). Hidden unless med.variants.
+  const calcVariantWrap = $("#calc-variant-wrap");
+  const calcVariantSeg  = $("#calc-variant-seg");
   const calcConc = $("#calc-conc");
   const calcDose = $("#calc-dose");
   const calcDoseUnits = $("#calc-dose-units");
@@ -981,7 +1067,7 @@
   // Resolve a med for the active population. Returns a synthetic merged med:
   // top-level acts as adult default; populations.<pop> overlays its keys.
   // Fallback chain: neonatal -> pediatric -> adult overlay -> top-level.
-  function resolvePopulation(med, pop) {
+  function resolvePopulation(med, pop, variant) {
     if (!med) return med;
     pop = pop || "adult";
     const pops = (med && med.populations) || {};
@@ -1005,13 +1091,43 @@
     delete out.populations;
     out._population = pop;
     out._hasPopulation = !!(pops.pediatric || pops.neonatal || pops.adult);
+    // ---- Variant overlay (last writer wins) ----
+    // When a med has variants (e.g. Vasopressin: Shock vs Diabetes Insipidus),
+    // overlay the selected variant's fields on top of the population-resolved
+    // med. The variant's own populations block (if any) is also resolved for
+    // the active population before merging.
+    if (Array.isArray(med.variants) && med.variants.length) {
+      const defaultVariant = (med.variants.find(v => v && v.default) || med.variants[0]).id;
+      const activeVariant = variant || defaultVariant;
+      const vOverrides = (med.variantOverrides && med.variantOverrides[activeVariant]) || null;
+      if (vOverrides) {
+        const vClone = JSON.parse(JSON.stringify(vOverrides));
+        const vPops = vClone.populations || {};
+        const vLayers = [];
+        if (pop === "neonatal") {
+          if (vPops.pediatric) vLayers.push(vPops.pediatric);
+          if (vPops.neonatal)  vLayers.push(vPops.neonatal);
+        } else if (pop === "pediatric") {
+          if (vPops.pediatric) vLayers.push(vPops.pediatric);
+        } else if (vPops.adult) {
+          vLayers.push(vPops.adult);
+        }
+        delete vClone.populations;
+        // Apply variant base, then variant-population layers.
+        for (const k of Object.keys(vClone)) out[k] = JSON.parse(JSON.stringify(vClone[k]));
+        for (const layer of vLayers) {
+          for (const k of Object.keys(layer)) out[k] = JSON.parse(JSON.stringify(layer[k]));
+        }
+      }
+      out._variant = activeVariant;
+    }
     return out;
   }
 
   // Get a med already resolved for the current population.
   function getResolvedMed(id) {
     const m = getMed(id);
-    return m ? resolvePopulation(m, state.population) : null;
+    return m ? resolvePopulation(m, state.population, state.variant) : null;
   }
 
   // Resolve concentrations for a given mode. Falls back to .concentrations if no
@@ -1039,7 +1155,21 @@
     const baseMed = getMed(id);
     if (!baseMed) return;
     state.currentMedId = id;
-    const med = resolvePopulation(baseMed, state.population);
+
+    // Variant init: if this med has variants (e.g. Vasopressin Shock/DI),
+    // default to the variant flagged default:true (else the first one).
+    // If no variants, clear state.variant so other meds aren't affected.
+    if (Array.isArray(baseMed.variants) && baseMed.variants.length) {
+      const defVar = (baseMed.variants.find(v => v && v.default) || baseMed.variants[0]).id;
+      state.variant = defVar;
+    } else {
+      state.variant = null;
+    }
+
+    const med = resolvePopulation(baseMed, state.population, state.variant);
+
+    // Render variant toggle (or hide if med has no variants).
+    renderVariantToggle(baseMed);
 
     calcName.textContent = med.name;
     // codeOnly entries use a sentinel category ("_codeOnly") that shouldn't
@@ -1079,6 +1209,14 @@
       b.classList.toggle("active", active);
       b.disabled = !types.includes(b.dataset.mode);
       b.style.opacity = b.disabled ? 0.4 : 1;
+      // Per-med label override: some meds re-purpose the Bolus mode label
+      // (e.g. Epi/Phenyl bolus is conceptually a "Push Dose Pressor").
+      // Default label is the capitalized mode name.
+      if (b.dataset.mode === "bolus") {
+        b.textContent = med.bolusLabel || "Bolus";
+      } else if (b.dataset.mode === "infusion") {
+        b.textContent = med.infusionLabel || "Infusion";
+      }
     });
 
     // Concentrations (per-mode aware)
@@ -1093,6 +1231,74 @@
     if (typeof calcModal.showModal === "function") calcModal.showModal();
     else calcModal.setAttribute("open", "");
 
+  }
+
+  // Render / hide the variant segmented toggle (Shock vs DI, etc.). Click
+  // handlers re-resolve the med with the new variant and refresh the calc.
+  function renderVariantToggle(baseMed) {
+    if (!calcVariantWrap || !calcVariantSeg) return;
+    const variants = Array.isArray(baseMed && baseMed.variants) ? baseMed.variants : [];
+    if (!variants.length) {
+      calcVariantWrap.hidden = true;
+      calcVariantSeg.innerHTML = "";
+      return;
+    }
+    calcVariantWrap.hidden = false;
+    calcVariantSeg.innerHTML = variants.map(v => {
+      const active = (v.id === state.variant) ? " active" : "";
+      const label = escapeHtml(v.label || v.id);
+      return `<button type="button" class="${active.trim()}" data-variant="${escapeHtml(v.id)}" role="tab" aria-selected="${v.id === state.variant}">${label}</button>`;
+    }).join("");
+    $$("button", calcVariantSeg).forEach(btn => {
+      btn.addEventListener("click", () => {
+        const newVar = btn.dataset.variant;
+        if (newVar === state.variant) return;
+        state.variant = newVar;
+        saveState();
+        // Refresh active styling.
+        $$("button", calcVariantSeg).forEach(b => {
+          const a = b.dataset.variant === state.variant;
+          b.classList.toggle("active", a);
+          b.setAttribute("aria-selected", a ? "true" : "false");
+        });
+        // Re-render concentrations, dose, notes, sources for the new variant.
+        refreshCalcForVariant();
+      });
+    });
+  }
+
+  // Re-render the open calc when the variant changes. Mirrors the relevant
+  // tail of openCalc without re-opening the modal or resetting variant.
+  function refreshCalcForVariant() {
+    const baseMed = getMed(state.currentMedId);
+    if (!baseMed) return;
+    const med = resolvePopulation(baseMed, state.population, state.variant);
+    // Refresh sources block (variant may have its own).
+    renderSources(med);
+    // Reset concIdx since concentrations may have changed length.
+    state.concIdx = 0;
+    // Pick a sensible mode if the variant changes what's available.
+    const types = effectiveTypes(med);
+    if (!types.includes(state.mode)) {
+      state.mode = types.includes("infusion") ? "infusion" : "bolus";
+    }
+    // Refresh mode-button enable/disable + labels.
+    $$("button", calcModeSeg).forEach(b => {
+      const active = b.dataset.mode === state.mode;
+      b.classList.toggle("active", active);
+      b.disabled = !types.includes(b.dataset.mode);
+      b.style.opacity = b.disabled ? 0.4 : 1;
+      if (b.dataset.mode === "bolus") {
+        b.textContent = med.bolusLabel || "Bolus";
+      } else if (b.dataset.mode === "infusion") {
+        b.textContent = med.infusionLabel || "Infusion";
+      }
+    });
+    renderConcentrations(med);
+    const cfg = med[state.mode];
+    state.dose = cfg ? cfg.dose : null;
+    calcDose.value = state.dose ?? "";
+    updateCalc();
   }
 
   // -------- Custom calculators (non-concentration×dose meds) --------

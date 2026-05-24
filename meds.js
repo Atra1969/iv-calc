@@ -37,6 +37,7 @@ const DEFAULT_MEDS = [
     name: "Epinephrine",
     category: "Pressors",
     type: "both",
+    bolusLabel: "Push Dose Pressor",
     bolusConcentrations: [
       { label: "10 mcg/mL (1 mg in 100 mL)", mg: 0.01, mL: 1 },
       { label: "100 mcg/mL (cardiac arrest 1:10,000)", mg: 0.1, mL: 1 }
@@ -138,6 +139,7 @@ const DEFAULT_MEDS = [
     name: "Phenylephrine",
     category: "Pressors",
     type: "both",
+    bolusLabel: "Push Dose Pressor",
     bolusConcentrations: [
       { label: "100 mcg/mL (push-dose syringe)", mg: 0.1, mL: 1 }
     ],
@@ -182,6 +184,12 @@ const DEFAULT_MEDS = [
     name: "Vasopressin",
     category: "Pressors",
     type: "infusion",
+    // Two clinical protocols share this drug. The modal shows a Shock / DI
+    // toggle so the nurse can swap between them without leaving the tile.
+    variants: [
+      { id: "shock", label: "Shock", default: true },
+      { id: "di",    label: "Diabetes Insipidus" }
+    ],
     concentrations: [
       { label: "40 units / 40 mL (1 unit/mL)", mg: 40, mL: 40, isUnits: true, unitsLabel: "units" }
     ],
@@ -217,6 +225,40 @@ const DEFAULT_MEDS = [
           notes: "UMHS NICU: 0.0001–0.002 u/kg/min, hard max 0.003."
         },
         notes: "UMHS NICU (cardiac shock): 0.0001–0.002 unit/kg/min, hard max 0.003. Titrate q15–20 min by 0.0001–0.0002 unit/kg/min. Vesicant."
+      }
+    },
+    // ----- DI variant overlay -----
+    // When the modal's variant toggle is set to "di", these fields take
+    // precedence over the shock-protocol defaults above. Same drug, totally
+    // different math: milliunits/kg/hr, not units/min.
+    variantOverrides: {
+      di: {
+        concentrations: [
+          { label: "100 milliunits/mL (10 units / 100 mL NS)", mg: 0.1, mL: 1, isUnits: true, unitsLabel: "milliunits" },
+          { label: "500 milliunits/mL (50 units / 100 mL NS)", mg: 0.5, mL: 1, isUnits: true, unitsLabel: "milliunits" }
+        ],
+        infusion: {
+          dose: 0.5, doseUnit: "milliunits", perKg: true, perTime: "hr",
+          min: 0.25, max: 40,
+          notes: "MCHC (DI): 0.25–10 milliunit/kg/hr (hard max 40). Highly variable — titrate by serum/urine sodium, osmolality, fluid balance, urine output."
+        },
+        notes: "DI dosing is DIFFERENT from shock dosing — use this protocol only for central DI (post-pituitary surgery, brain death/donor management). Vesicant — extravasation: call Pharmacy.",
+        populations: {
+          pediatric: {
+            infusion: {
+              dose: 0.5, doseUnit: "milliunits", perKg: true, perTime: "hr",
+              min: 0.25, max: 40,
+              notes: "PICU central DI: 0.25–10 milliunit/kg/hr; titrate to UOP / serum Na / osmolality."
+            }
+          },
+          neonatal: {
+            infusion: {
+              dose: 0.25, doseUnit: "milliunits", perKg: true, perTime: "hr",
+              min: 0.1, max: 10,
+              notes: "NICU central DI: 0.1–1.0 milliunit/kg/hr initial; hard max 10."
+            }
+          }
+        }
       }
     }
   },
@@ -328,7 +370,7 @@ const DEFAULT_MEDS = [
   {
     id: "epoprostenol",
     name: "Epoprostenol (Veletri/Flolan)",
-    category: "Pressors",
+    category: "Respiratory",
     type: "infusion",
     concentrations: [
       { label: "0.5 mg / 100 mL (5,000 ng/mL)", mg: 0.5, mL: 100 },
@@ -502,23 +544,6 @@ const DEFAULT_MEDS = [
     }
   },
   {
-    id: "etomidate",
-    name: "Etomidate",
-    category: "Sedation",
-    type: "bolus",
-    concentrations: [
-      { label: "2 mg/mL", mg: 2, mL: 1 }
-    ],
-    bolus: {
-      dose: 0.3, doseUnit: "mg", perKg: true,
-      min: 0.2, max: 0.4, maxAbsolute: 40,
-      notes: "RSI induction: 0.3 mg/kg IV. Hemodynamically neutral."
-    },
-    sources: [
-      { label: "FDA Etomidate PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=etomidate" }
-    ]
-  },
-  {
     id: "propofol",
     name: "Propofol",
     category: "Sedation",
@@ -563,6 +588,7 @@ const DEFAULT_MEDS = [
     id: "midazolam",
     name: "Midazolam",
     category: "Sedation",
+    secondaryCategories: ["Anticonvulsants"],
     type: "both",
     bolusConcentrations: [
       { label: "1 mg/mL", mg: 1, mL: 1 },
@@ -649,7 +675,7 @@ const DEFAULT_MEDS = [
   {
     id: "pentobarbital",
     name: "Pentobarbital",
-    category: "Sedation",
+    category: "Anticonvulsants",
     type: "infusion",
     concentrations: [
       { label: "50 mg/mL (vial)", mg: 50, mL: 1 }
@@ -859,25 +885,6 @@ const DEFAULT_MEDS = [
     }
   },
   {
-    id: "succinylcholine",
-    name: "Succinylcholine",
-    category: "Paralytics",
-    type: "bolus",
-    concentrations: [
-      { label: "20 mg/mL", mg: 20, mL: 1 },
-      { label: "100 mg / 10 mL (10 mg/mL) infusion stock", mg: 100, mL: 10 },
-      { label: "50 mg/mL undiluted vial", mg: 50, mL: 1 },
-    ],
-    bolus: {
-      dose: 1.5, doseUnit: "mg", perKg: true,
-      min: 1, max: 2, maxAbsolute: 200,
-      notes: "RSI 1.5 mg/kg IV (2 mg/kg in obese, IBW dosing). Avoid in hyperK, burns >24h, denervation."
-    },
-    sources: [
-      { label: "FDA Anectine (succinylcholine) PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=succinylcholine" }
-    ]
-  },
-  {
     id: "vecuronium",
     name: "Vecuronium",
     category: "Paralytics",
@@ -1029,7 +1036,8 @@ const DEFAULT_MEDS = [
   {
     id: "adenosine",
     name: "Adenosine",
-    category: "Antiarrhythmics",
+    category: "_codeOnly",
+    codeOnly: true,
     type: "bolus",
     concentrations: [
       { label: "3 mg/mL", mg: 3, mL: 1 }
@@ -1187,7 +1195,7 @@ const DEFAULT_MEDS = [
   {
     id: "atropine",
     name: "Atropine",
-    category: "Antiarrhythmics",
+    category: "Toxicology",
     type: "bolus",
     concentrations: [
       { label: "0.1 mg/mL", mg: 0.1, mL: 1 },
@@ -1804,6 +1812,7 @@ const DEFAULT_MEDS = [
     id: "hypertonic_saline_3",
     name: "3% Saline (Hypertonic)",
     category: "Other",
+    secondaryCategories: ["Anticonvulsants"],
     type: "bolus",
     concentrations: [
       { label: "3% Saline (30 mg/mL, 500 mL bag) — per user protocol", mg: 1, mL: 1, isUnits: true, unitsLabel: "mL" }
@@ -1957,7 +1966,7 @@ const DEFAULT_MEDS = [
   {
     id: "heparin",
     name: "Heparin",
-    category: "Other",
+    category: "Blood Thinners",
     type: "both",
     bolusConcentrations: [
       { label: "100 units/mL", mg: 100, mL: 1, isUnits: true, unitsLabel: "units" },
@@ -2058,6 +2067,7 @@ const DEFAULT_MEDS = [
     id: "methylene_blue",
     name: "Methylene Blue",
     category: "Toxicology",
+    secondaryCategories: ["Pressors"],
     type: "bolus",
     bolusConcentrations: [
       { label: "10 mg/mL (1% solution, 10 mL vial)", mg: 10, mL: 1 },
@@ -2097,6 +2107,7 @@ const DEFAULT_MEDS = [
     id: "hydroxocobalamin",
     name: "Hydroxocobalamin (Cyanokit)",
     category: "Toxicology",
+    secondaryCategories: ["Pressors"],
     type: "bolus",
     bolusConcentrations: [
       { label: "25 mg/mL (5 g / 200 mL reconstituted)", mg: 25, mL: 1 }
@@ -2135,7 +2146,7 @@ const DEFAULT_MEDS = [
   {
     id: "aminophylline",
     name: "Aminophylline",
-    category: "Cardiac",
+    category: "Respiratory",
     type: "both",
     bolusConcentrations: [
       { label: "25 mg/mL", mg: 25, mL: 1 }
@@ -2164,7 +2175,7 @@ const DEFAULT_MEDS = [
   {
     id: "argatroban",
     name: "Argatroban",
-    category: "Cardiac",
+    category: "Blood Thinners",
     type: "infusion",
     concentrations: [
       { label: "100 mg / 250 mL (0.4 mg/mL)", mg: 100, mL: 250 },
@@ -2184,7 +2195,7 @@ const DEFAULT_MEDS = [
   {
     id: "bivalirudin",
     name: "Bivalirudin (Angiomax)",
-    category: "Cardiac",
+    category: "Blood Thinners",
     type: "infusion",
     concentrations: [
       { label: "250 mg / 50 mL (5 mg/mL)", mg: 250, mL: 50 },
@@ -2198,25 +2209,6 @@ const DEFAULT_MEDS = [
     notes: "Follow aPTTs. Renally eliminated — dose-reduce in CrCl <30. Used for HIT, VAD, ECMO anticoagulation.",
     sources: [
       { label: "FDA Angiomax (bivalirudin) PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=bivalirudin" },
-      UMHS_MCHC_SRC
-    ]
-  },
-  {
-    id: "fenoldopam",
-    name: "Fenoldopam (Corlopam)",
-    category: "Cardiac",
-    type: "infusion",
-    concentrations: [
-      { label: "40 mg / 250 mL (160 mcg/mL)", mg: 40, mL: 250 }
-    ],
-    infusion: {
-      dose: 0.2, doseUnit: "mcg", perKg: true, perTime: "min",
-      min: 0.1, max: 0.8,
-      notes: "MCHC: 0.1–0.8 mcg/kg/min (hard max 0.8). Selective DA1 agonist — used for hypertensive emergency and renal protection. Improves renal blood flow."
-    },
-    notes: "Watch for reflex tachycardia and hypotension. May raise IOP — caution in glaucoma. Sulfite-containing — avoid in sulfite allergy.",
-    sources: [
-      { label: "FDA Corlopam (fenoldopam) PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=fenoldopam" },
       UMHS_MCHC_SRC
     ]
   },
@@ -2251,7 +2243,7 @@ const DEFAULT_MEDS = [
   {
     id: "terbutaline",
     name: "Terbutaline",
-    category: "Cardiac",
+    category: "Respiratory",
     type: "both",
     bolusConcentrations: [
       { label: "1 mg/mL", mg: 1, mL: 1 }
@@ -2279,7 +2271,7 @@ const DEFAULT_MEDS = [
   {
     id: "treprostinil",
     name: "Treprostinil (Remodulin)",
-    category: "Cardiac",
+    category: "Respiratory",
     type: "infusion",
     concentrations: [
       { label: "1 mg/mL (1.0 mg/mL vial)", mg: 1, mL: 1 },
@@ -2298,26 +2290,6 @@ const DEFAULT_MEDS = [
       UMHS_MCHC_SRC
     ]
   },
-  {
-    id: "vasopressin_di",
-    name: "Vasopressin (Diabetes Insipidus)",
-    category: "Cardiac",
-    type: "infusion",
-    concentrations: [
-      { label: "100 milliunits/mL (10 units / 100 mL NS)", mg: 0.1, mL: 1, isUnits: true, unitsLabel: "milliunits" },
-      { label: "500 milliunits/mL (50 units / 100 mL NS)", mg: 0.5, mL: 1, isUnits: true, unitsLabel: "milliunits" }
-    ],
-    infusion: {
-      dose: 0.5, doseUnit: "milliunits", perKg: true, perTime: "hr",
-      min: 0.25, max: 40,
-      notes: "MCHC (DI): 0.25–10 milliunit/kg/hr (hard max 40). Highly variable — titrate by serum/urine sodium, osmolality, fluid balance, urine output."
-    },
-    notes: "DI dosing is DIFFERENT from shock dosing — use this entry only for central DI (post-pituitary surgery, brain death/donor management). Vesicant — extravasation: call Pharmacy.",
-    sources: [
-      { label: "FDA Vasopressin PI", url: "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=vasopressin" },
-      UMHS_MCHC_SRC
-    ]
-  }
 ];
 
 const DEFAULT_CATEGORIES = [
@@ -2328,12 +2300,13 @@ const DEFAULT_CATEGORIES = [
   "Antiarrhythmics",
   "Antihypertensives",
   "Anticonvulsants",
+  "Respiratory",
   "Reversal",
   "Toxicology",
   "Electrolytes",
+  "Blood Thinners",
   "IVF Bolus",
   "Maintenance",
-  "Cardiac",
   "Other",
   "Custom"
 ];

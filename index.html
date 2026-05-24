@@ -118,6 +118,13 @@
       </div>
     </header>
 
+    <!-- Variant toggle (e.g. Vasopressin Shock vs Diabetes Insipidus) -->
+    <!-- Hidden by default; openCalc reveals + populates when med has variants. -->
+    <div id="calc-variant-wrap" class="variant-wrap" hidden>
+      <div class="variant-label" id="calc-variant-label">Protocol</div>
+      <div class="seg variant-seg" id="calc-variant-seg" role="tablist" aria-label="Protocol variant"></div>
+    </div>
+
     <!-- Quick bolus button (shown in infusion mode for meds with both modes) -->
     <div id="calc-bolus-cta" class="bolus-cta" hidden>
       <button type="button" id="calc-bolus-btn" class="btn-bolus-cta">
